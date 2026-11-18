@@ -92,6 +92,9 @@ class Params:
     # uniones de deleción a partir de colas soft-clipped. Si es None, esa
     # fuente de evidencia queda desactivada (comportamiento previo).
     wt_seq: Optional[str] = None
+    # Capa estadística: calibrar el ruido con las lecturas WT de la muestra
+    # (añade p-valores empíricos; no altera la clasificación).
+    calibration: bool = True
 
     def __post_init__(self):
         # Ventana WT: si no se especifica, se deriva del amplicón (±4 %).
@@ -286,6 +289,137 @@ def is_inversion(ev: ReadEvidence, p: Params) -> Tuple[bool, dict]:
                 }
 
     return False, {}
+
+
+# ---------- Búsqueda directa de la unión (deleciones pequeñas) -------------
+#
+# Problema: en deleciones pequeñas (~120 nt) las referencias WT y EDIT son
+# casi idénticas, el margen de score EDIT-WT es comparable al ruido de
+# secuenciación y el fallback por alineamiento contra EDIT apenas dispara.
+# La unión de la deleción (flanco 5' inmediatamente seguido del flanco 3')
+# es una señal INDEPENDIENTE del tamaño de la deleción: solo existe en
+# lecturas editadas. La buscamos directamente en la secuencia de la lectura
+# con semillas exactas + verificación de identidad de los flancos.
+
+_JUNCTION_FLANK = 25      # nt de flanco a cada lado de la unión
+_JUNCTION_SEED_K = 8      # longitud de las semillas exactas
+_JUNCTION_MH_MAX = 10     # microhomología máxima tolerada (nt)
+_JUNCTION_MIN_ID = 0.60   # identidad mínima flanco vs lectura
+
+
+def _find_junction_in_seq(seq: str, flank5: str, flank3: str, slack: int,
+                          k: int = _JUNCTION_SEED_K,
+                          flank: int = _JUNCTION_FLANK) -> Optional[int]:
+    """Busca la unión (flanco5 seguido de flanco3) en una secuencia.
+
+    Devuelve la separación observada entre flancos (inserción NHEJ, 0 si
+    unión exacta, negativo si microhomología) o None si no hay unión.
+    """
+    # Semillas: dos por flanco, pegadas a la unión.
+    # (semilla, distancia desde el inicio de la semilla a la unión)
+    #   lado 5': la unión está DESPUÉS del final de la semilla
+    #   lado 3': la unión está ANTES del inicio de la semilla
+    seeds5 = [(flank5[-2 * k:-k], 2 * k), (flank5[-k:], k)]
+    seeds3 = [(flank3[:k], 0), (flank3[k:2 * k], -k)]
+
+    # Índice de k-mers de la secuencia
+    idx: Dict[str, List[int]] = {}
+    for i in range(0, len(seq) - k + 1):
+        idx.setdefault(seq[i:i + k], []).append(i)
+
+    def _identity(a: str, b: str) -> float:
+        return sum(x == y for x, y in zip(a, b)) / max(len(b), 1)
+
+    for s5, dist5 in seeds5:
+        for hit5 in idx.get(s5, ()):
+            junction5 = hit5 + dist5        # posición de la unión (lado 5')
+            for s3, dist3 in seeds3:
+                for hit3 in idx.get(s3, ()):
+                    junction3 = hit3 + dist3  # posición de la unión (lado 3')
+                    gap = junction3 - junction5
+                    if not (-_JUNCTION_MH_MAX <= gap <= slack):
+                        continue
+                    # Verificación de identidad de ambos flancos
+                    seg5 = seq[junction5 - flank:junction5]
+                    seg3 = seq[junction3:junction3 + flank]
+                    if len(seg5) < flank or len(seg3) < flank:
+                        continue
+                    if _identity(seg5, flank5) < _JUNCTION_MIN_ID:
+                        continue
+                    if _identity(seg3, flank3) < _JUNCTION_MIN_ID:
+                        continue
+                    return gap
+    return None
+
+
+def _infer_deletion_from_junction_search(ev: ReadEvidence, p: Params,
+                                         flank: int = _JUNCTION_FLANK
+                                         ) -> Optional[dict]:
+    """Cuarta fuente de evidencia: la unión esperada (flanco5+flanco3) está
+    literalmente en la secuencia de la lectura.
+
+    Se buscan semillas exactas de 8 nt a ambos lados de la unión y se
+    comprueba que la distancia entre flancos sea coherente con la deleción
+    esperada (0–slack, tolerando inserciones NHEJ y microhomología corta).
+    Un evento aquí tiene breakpoints ASUMIDOS (= esperados), como el
+    fallback por alineamiento contra EDIT, pero no depende de que minimap2
+    resuelva bien la lectura.
+
+    ESPECIFICIDAD: si la unión ya existe de forma nativa en el amplicón WT
+    (p. ej. flancos dentro de repeticiones compuestas como los sitios FRT,
+    que son pseudopalíndromos), la señal no es evidencia de edición y la
+    búsqueda queda desactivada para todo el amplicón.
+    """
+    if not p.wt_seq:
+        return None
+    ds = p.deletion_start - 1
+    de = p.deletion_end
+    expected_del = de - ds
+    k = _JUNCTION_SEED_K
+    if expected_del <= 4 * k:      # deleción ínfima: los flancos se solaparían
+        return None
+
+    flank5 = p.wt_seq[max(0, ds - flank):ds]
+    flank3 = p.wt_seq[de:de + flank]
+    if len(flank5) < flank or len(flank3) < flank:
+        return None
+
+    # Margen de separación entre flancos: 0 = unión exacta; valores
+    # positivos = inserción NHEJ; negativos = microhomología. Debe quedar
+    # muy por debajo del tamaño esperado (si no, es una lectura WT normal:
+    # sus flancos están a `expected_del` de distancia).
+    slack = min(50, expected_del - 4 * k)
+
+    # Comprobación de especificidad (cacheada por Params): ¿existe la
+    # unión en el propio WT? En el WT intacto los flancos están a
+    # `expected_del`; una aparición con gap pequeño solo puede venir de
+    # repeticiones internas → desactivar.
+    specific = getattr(p, "_junction_specific", None)
+    if specific is None:
+        native = _find_junction_in_seq(p.wt_seq, flank5, flank3, slack,
+                                      k=k, flank=flank)
+        specific = native is None
+        p._junction_specific = specific   # type: ignore[attr-defined]
+    if not specific:
+        return None
+
+    # Secuencia de la lectura (en orientación de referencia) del
+    # alineamiento primario; es la misma para WT y EDIT.
+    prim = best_primary(ev.wt_alns) or best_primary(ev.edit_alns)
+    seq = prim.query_sequence if prim is not None else None
+    if not seq:
+        return None
+
+    gap = _find_junction_in_seq(seq, flank5, flank3, slack, k=k, flank=flank)
+    if gap is None:
+        return None
+    ins = max(0, gap)
+    return {
+        "d_start": ds, "d_end": de, "d_len": expected_del,
+        "ins_5p": 0, "ins_3p": ins, "ins_total": ins,
+        "source": "junction_search",
+        "junction_ins": ins,
+    }
 
 
 def _infer_deletion_from_edit_alignment(ev: ReadEvidence, p: Params) -> Optional[dict]:
@@ -710,6 +844,14 @@ def classify_deletion(ev: ReadEvidence, p: Params) -> Tuple[Optional[str], dict]
     if not events:
         events.extend(_infer_deletion_from_softclip(ev, p))
 
+    # Si todavía no hay eventos, búsqueda directa de la unión en la
+    # secuencia de la lectura (crítico en deleciones pequeñas, donde el
+    # margen de score EDIT-WT apenas supera el ruido).
+    if not events:
+        junction_ev = _infer_deletion_from_junction_search(ev, p)
+        if junction_ev is not None:
+            events.append(junction_ev)
+
     # Si todavía no hay eventos, recurrimos al alineamiento contra EDIT
     if not events:
         edit_ev = _infer_deletion_from_edit_alignment(ev, p)
@@ -911,6 +1053,24 @@ def run_classification(wt_records, edit_records, params: Params,
         })
 
     df = pd.DataFrame(rows)
+
+    # ---- Capa estadística opcional: calibración del ruido con las lecturas
+    # WT de la muestra (no altera las clases; añade p-valores empíricos).
+    calib_params = getattr(params, "calibration", True)
+    calib_summary = None
+    if calib_params:
+        from .calibration import annotate_with_significance
+        classes_by_read = {r["read_id"]: r["class"] for r in rows}
+        try:
+            calib_summary = annotate_with_significance(rows, ev, classes_by_read)
+        except Exception as e:            # la capa nunca rompe el pipeline
+            calib_summary = None
+            print(f"  [AVISO] calibración estadística desactivada: {e}")
+        if calib_summary is None:
+            print("  [AVISO] calibración estadística omitida: "
+                  f"menos de 20 lecturas WT en la muestra")
+        df = pd.DataFrame(rows)
+
     df.to_csv(out_tsv, sep="\t", index=False)
 
     total = sum(counts.values()) or 1
@@ -961,6 +1121,30 @@ def run_classification(wt_records, edit_records, params: Params,
         "class": "TOTAL", "description": "Total de lecturas",
         "reads": total, "frequency_pct": 100.0, "frequency_pct_informative": "",
     })
+    if calib_summary is not None:
+        rows_summary.append({
+            "class": "CALIB_NULL",
+            "description": "Lecturas WT usadas para calibrar el ruido (nula empírica)",
+            "reads": calib_summary["n_null"],
+            "frequency_pct": round(100 * calib_summary["n_null"] / total, 3),
+            "frequency_pct_informative": "",
+        })
+        rows_summary.append({
+            "class": "CALIB_SIG",
+            "description": f"Lecturas editadas con p < {calib_summary['p_threshold']} "
+                           "(significativamente por encima del ruido WT)",
+            "reads": calib_summary["n_edited_sig"],
+            "frequency_pct": round(100 * calib_summary["n_edited_sig"] / total, 3),
+            "frequency_pct_informative": "",
+        })
+        rows_summary.append({
+            "class": "CALIB_EXP_FP",
+            "description": "Falsos positivos esperados bajo H0 (suma de p-valores "
+                           "de las lecturas editadas)",
+            "reads": calib_summary["expected_fp"],
+            "frequency_pct": "",
+            "frequency_pct_informative": "",
+        })
     summary = pd.DataFrame(rows_summary)
     summary.to_csv(out_summary, sep="\t", index=False)
 

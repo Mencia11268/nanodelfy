@@ -143,6 +143,12 @@ def build_parser() -> argparse.ArgumentParser:
                     help="tamaño mínimo de deleción estructural (nt). "
                          "Bájalo (p. ej. 100) para deleciones pequeñas (~120 pb)")
     run.add_argument("--min-mapq", type=int, default=None)
+    run.add_argument("--wt-min", type=int, default=None,
+                    help="longitud mínima de lecturas 'tipo WT' "
+                         "(por defecto: amplicón −4 %)")
+    run.add_argument("--wt-max", type=int, default=None,
+                    help="longitud máxima de lecturas 'tipo WT' "
+                         "(por defecto: amplicón +4 %)")
     run.add_argument("--nhej-search-window", type=int, default=None)
     run.add_argument("--guides", default=None,
                     help="guías, una por línea: 'etiqueta: SECUENCIA' "
@@ -156,6 +162,10 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--frt-analysis", dest="frt_analysis",
                     action="store_true", default=None,
                     help="forzar el módulo FRT (por defecto: auto)")
+    run.add_argument("--no-calibration", dest="calibration",
+                    action="store_false", default=None,
+                    help="desactivar la capa estadística de calibración "
+                         "del ruido (p-valores empíricos con las lecturas WT)")
     run.set_defaults(func=_cmd_run)
 
     web = sub.add_parser("web", help="interfaz web local")

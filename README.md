@@ -105,7 +105,8 @@ En `salida/results/`:
 
 - `<muestra>.read_classification.tsv` — clase por lectura: `read_id`, `length`,
   `class`, alineamientos WT/EDIT, scores, regla aplicada, offsets respecto a los
-  breakpoints, inserciones.
+  breakpoints, inserciones; desde la v1.1.0, columnas de calibración
+  (`max_d_wt`, `as_margin`, `p_as_margin`, `p_max_d`, `sig_noise`).
 - `<muestra>.summary.tsv` — recuentos y porcentajes por clase (incluye el
   denominador de lecturas informativas).
 - `<muestra>.resultados.xlsx` — todo lo anterior en Excel.
@@ -153,13 +154,52 @@ En `src/ampdel/presets/`:
 Crea los tuyos copiando la estructura (JSON plano con los parámetros de la tabla
 anterior) y pásalos con `--preset mi_preset.json`.
 
+## Capa estadística (calibración del ruido)
+
+Desde la v1.1.0 ampdel separa señal de ruido **sin alterar la clasificación
+determinista**. El método es una calibración empírica:
+
+1. Hipótesis nula H0: "la lectura es WT (solo ruido de secuenciación)".
+2. La distribución nula se estima con las **propias lecturas WT** de la muestra
+   (clases WT y WT_PARTIAL): comparten el mismo ruido de secuenciación.
+   Si hay menos de 20 lecturas WT, la capa se omite con un aviso (o
+   desactívala con `--no-calibration`).
+3. Estadísticos por lectura: `max_d_wt` (la mayor deleción del CIGAR contra
+   WT) y `as_margin` (AS de EDIT − AS de WT).
+4. Cada lectura informativa recibe p-valores empíricos un lado
+   (`p_as_margin`, `p_max_d`) y el indicador `sig_noise` (p < 0,05).
+
+En el resumen, las filas `CALIB_NULL` (lecturas WT usadas como nula),
+`CALIB_SIG` (lecturas editadas con p < 0,05) y `CALIB_EXP_FP` (falsos
+positivos esperados bajo H0: la suma de p-valores de las lecturas
+editadas — cuántas de ellas serían compatibles con puro ruido WT).
+
+Las lecturas truncadas en regiones idénticas WT/EDIT tienen margen ~0 por
+construcción: sus columnas quedan vacías y no cuentan como significativas.
+
+Validación: en una muestra WT pura (9.648 lecturas simuladas), 0 lecturas
+significativas y FP esperados 0,0; en la mezcla amp120 (deleción real de
+120 pb), las 283 lecturas editadas son significativas con 1,05 FP esperados.
+
+## Búsqueda directa de la unión (deleciones pequeñas)
+
+En deleciones pequeñas (<150 pb) las referencias WT y EDIT son casi idénticas
+y el margen de score apenas supera el ruido. Desde la v1.1.0 hay una 4ª fuente
+de evidencia: la **unión** (flanco 5' + flanco 3' pegados) se busca
+directamente en la secuencia de la lectura con semillas exactas de 8 nt y
+verificación de identidad de los flancos. La unión solo existe en lecturas
+editadas, sea cual sea el tamaño de la deleción.
+
+Control de especificidad: si la unión ya existe de forma nativa en el
+amplicón WT (flancos dentro de repeticiones compuestas, como los sitios FRT
+pseudopalíndromos), la señal no es evidencia y la búsqueda se desactiva
+automáticamente para todo el amplicón.
+
 ## Limitaciones
 
-- No hay separación estadística de lecturas de ruido: la clasificación es
-  determinista por lectura (en validación con 9648 lecturas WT simuladas
-  no produjo falsos positivos, pero no sustituye a un modelo estadístico).
-- En deleciones pequeñas (<150 pb) el fallback EDIT de lecturas truncadas es
-  débil por construcción: las referencias WT y EDIT son casi idénticas.
+- La calibración estadística es empírica (no paramétrica): necesita ≥20
+  lecturas WT en la muestra; si la edición es casi total (cero WT),
+  usa una muestra control WT o desactiva la capa.
 - La referencia EDIT se genera como deleción simple: para alelos con inserciones
   grandes conocidas, esas lecturas caerán en `DEL_WITH_INSERTION`/`OTHER`.
 - Un solo amplicón por ejecución (por diseño: una pareja de guías y una

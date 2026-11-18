@@ -81,6 +81,7 @@ def run_full_pipeline(
         wt_max=params.get("wt_max"),
         nhej_search_window=params.get("nhej_search_window", 500),
         min_junction_insertion=params.get("min_junction_insertion", 5),
+        calibration=params.get("calibration", True),
     )
     cls_stats = run_classification(
         wt_records, edit_records, p,
