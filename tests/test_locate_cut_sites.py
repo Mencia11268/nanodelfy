@@ -6,8 +6,8 @@ PAM-proximal (Zetsche et al. 2015, Cell 163, 759-771).
 """
 import pytest
 
-from ampdel.core.microindel import locate_cut_sites, parse_guides, revcomp
-from ampdel.core.microindel import _normalize_nuclease
+from nanodelfy.core.microindel import locate_cut_sites, parse_guides, revcomp
+from nanodelfy.core.microindel import _normalize_nuclease
 
 # Referencia sintética que reproduce las posiciones del amplicón MmC7:
 # PAM TTTC en la posición 46 (1-based) seguida del protospacer Cas12a real.

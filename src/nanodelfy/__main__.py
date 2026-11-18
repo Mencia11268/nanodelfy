@@ -1,4 +1,4 @@
-"""Punto de entrada: ampdel run / ampdel web."""
+"""Punto de entrada: nanodelfy run / nanodelfy web."""
 from .cli import main
 
 if __name__ == "__main__":

@@ -1,37 +1,37 @@
-# ampdel
+# nanodelfy
 
-**ampdel** (AMPlicon DELetion) clasifica lecturas largas (Nanopore/PacBio) de
-amplicones CRISPR con deleciones grandes entre dos puntos de corte, con soporte
-para **Cas9 y Cas12a**, amplicones de cualquier tamaño y deleciones desde ~120 pb
-hasta varios kb.
+**nanodelfy** (de *NanoDel*, su desarrollo original) clasifica lecturas largas
+(Nanopore/PacBio) de amplicones CRISPR con deleciones grandes entre dos puntos
+de corte, con soporte para **Cas9 y Cas12a**, amplicones de cualquier tamaño y
+deleciones desde ~120 pb hasta varios kb.
 
-ampdel nace de la unificación de las dos versiones de la app NanoDel
+nanodelfy nace de la unificación de las dos versiones de la app NanoDel
 desarrolladas para los amplicones AESC7 y MmC7 (deleciones FRT-FRT), ahora
 generalizada para que cualquier laboratorio pueda analizar sus propios
 amplicones.
 
-- Dos referencias: solo necesitas el FASTA del amplicón **WT**; ampdel genera la
+- Dos referencias: solo necesitas el FASTA del amplicón **WT**; nanodelfy genera la
   referencia EDIT (amplicón con la deleción esperada) automáticamente.
 - Clasificación por lectura: WT, deleción exacta, deleción extendida, deleción con
   inserción, inversión, lecturas truncadas (no informativas)...
 - Microindels alrededor de los cortes de las guías, con reglas específicas de
   Cas9 (PAM NGG, corte romo) y Cas12a (PAM TTTV, corte escalonado).
 - Dos interfaces: **web local** (arrastra y suelta tu FASTQ) y **CLI**
-  reproducible (`ampdel run`), con presets JSON.
+  reproducible (`nanodelfy run`), con presets JSON.
 
 ## Instalación
 
 Requisitos: Python 3.10 o superior.
 
 ```bash
-pip install ampdel          # desde PyPI (cuando se publique)
+pip install nanodelfy          # desde PyPI (cuando se publique)
 ```
 
 Desde el código fuente (este repositorio):
 
 ```bash
-git clone https://github.com/USUARIO/ampdel.git
-cd ampdel
+git clone https://github.com/USUARIO/nanodelfy.git
+cd nanodelfy
 pip install .
 ```
 
@@ -43,7 +43,7 @@ Dependencias: `mappy` (alineador minimap2 para Python), `pysam`, `pandas`,
 ### Interfaz web
 
 ```bash
-ampdel web            # abre http://127.0.0.1:8765
+nanodelfy web            # abre http://127.0.0.1:8765
 ```
 
 Sube tu FASTQ y el FASTA del amplicón WT, indica las coordenadas de la deleción
@@ -52,7 +52,7 @@ esperada y las guías, y pulsa Ejecutar.
 ### Línea de comandos
 
 ```bash
-ampdel run \
+nanodelfy run \
   --fastq muestra.fastq.gz \
   --wt amplicon_WT.fa \
   --out salida \
@@ -65,8 +65,8 @@ ampdel run \
 O con un preset:
 
 ```bash
-ampdel run --fastq muestra.fastq --wt amplicon_WT.fa --out salida \
-  --preset $(python -c "import ampdel, pathlib; print(pathlib.Path(ampdel.__file__).parent / 'presets' / 'mmc7.json')")
+nanodelfy run --fastq muestra.fastq --wt amplicon_WT.fa --out salida \
+  --preset $(python -c "import nanodelfy, pathlib; print(pathlib.Path(nanodelfy.__file__).parent / 'presets' / 'mmc7.json')")
 ```
 
 ## Parámetros
@@ -145,7 +145,7 @@ funciona con guías de 23 o 24 nt.
 
 ## Presets incluidos
 
-En `src/ampdel/presets/`:
+En `src/nanodelfy/presets/`:
 
 - `aesc7.json` — amplicón AESC7 (3117 nt), deleción FRT-FRT 1157-2981.
 - `mmc7.json` — amplicón MmC7 (3887 nt), deleción FRT-FRT 1438-3295 (activa el
@@ -156,7 +156,7 @@ anterior) y pásalos con `--preset mi_preset.json`.
 
 ## Capa estadística (calibración del ruido)
 
-Desde la v1.1.0 ampdel separa señal de ruido **sin alterar la clasificación
+Desde la v1.1.0 nanodelfy separa señal de ruido **sin alterar la clasificación
 determinista**. El método es una calibración empírica:
 
 1. Hipótesis nula H0: "la lectura es WT (solo ruido de secuenciación)".
@@ -216,7 +216,7 @@ Los tests usan datos sintéticos autogenerados (no requieren descargas).
 
 ## Citación
 
-Si usas ampdel, cita el repositorio. El archivo `CITATION.cff` contiene los
+Si usas nanodelfy, cita el repositorio. El archivo `CITATION.cff` contiene los
 metadatos de citación.
 
 ## Licencia
@@ -225,5 +225,5 @@ MIT — ver [LICENSE](LICENSE).
 
 ## Historia
 
-ampdel unifica y generaliza la app NanoDel (versiones AESC7 y MmC7).
+nanodelfy unifica y generaliza la app NanoDel (versiones AESC7 y MmC7).
 El desarrollo previo está documentado en [CHANGELOG.md](CHANGELOG.md).

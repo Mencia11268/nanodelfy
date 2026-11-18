@@ -8,11 +8,11 @@ sea cual sea el tamaño de la deleción.
 import random
 from dataclasses import field
 
-from ampdel.core.classify import (
+from nanodelfy.core.classify import (
     Params, ReadEvidence, classify_read, _infer_deletion_from_junction_search,
 )
-from ampdel.core.filter_align import AlnRecord
-from ampdel.core.calibration import (
+from nanodelfy.core.filter_align import AlnRecord
+from nanodelfy.core.calibration import (
     read_noise_metrics, build_null_distribution, annotate_with_significance,
 )
 

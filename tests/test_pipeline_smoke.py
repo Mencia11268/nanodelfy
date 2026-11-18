@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from ampdel.core.pipeline import run_full_pipeline
+from nanodelfy.core.pipeline import run_full_pipeline
 
 WT_LEN = 3887
 DEL_START, DEL_END = 1438, 1557          # 1-based inclusivo → 120 nt
@@ -60,7 +60,7 @@ def _write_fastq(path: Path, reads: list[tuple[str, str]], rng: random.Random) -
 @pytest.fixture(scope="module")
 def mini_dataset(tmp_path_factory):
     """Amplicón + FASTQ con 30 lecturas WT y 30 lecturas EDIT."""
-    tmp = tmp_path_factory.mktemp("ampdel_smoke")
+    tmp = tmp_path_factory.mktemp("nanodelfy_smoke")
     rng = random.Random(20260101)
     wt = _sim_ref("ACGT", WT_LEN, rng)
     edit = wt[:DEL_START - 1] + wt[DEL_END:]      # 120 nt menos
@@ -117,7 +117,7 @@ def test_pipeline_end_to_end(mini_dataset, tmp_path):
 
     # 2. Lecturas EDIT detectadas como deleción (sensibilidad ≥ 70 %)
     import pandas as pd
-    from ampdel.core.classify import EDITED_CLASSES
+    from nanodelfy.core.classify import EDITED_CLASSES
     df = pd.read_csv(files["perread_tsv"], sep="\t")
     edits = df[df["read_id"].str.startswith("edit_")]
     if len(edits):

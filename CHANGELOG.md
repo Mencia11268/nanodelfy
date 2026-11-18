@@ -5,14 +5,14 @@ Versionado [SemVer](https://semver.org/lang/es/).
 
 ## [1.0.0] — 2026-11-18
 
-Primera versión pública. ampdel unifica y generaliza la app NanoDel
+Primera versión pública. nanodelfy unifica y generaliza la app NanoDel
 (versiones AESC7 y MmC7) para su uso con cualquier amplicón.
 
 ### Añadido
 
 - Unificación de las dos versiones de NanoDel (AESC7 y MmC7) en un único
-  paquete `ampdel` con estructura `src/` y CLI de dos subcomandos:
-  `ampdel run` (pipeline reproducible) y `ampdel web` (interfaz web local).
+  paquete `nanodelfy` con estructura `src/` y CLI de dos subcomandos:
+  `nanodelfy run` (pipeline reproducible) y `nanodelfy web` (interfaz web local).
 - Generalización: coordenadas de deleción, amplicón y guías son parámetros;
   la referencia EDIT se genera desde el WT automáticamente.
 - Parámetro `nuclease` (`cas9`/`cas12a`) en `locate_cut_sites` y en la
@@ -82,3 +82,12 @@ Primera versión pública. ampdel unifica y generaliza la app NanoDel
 
 - CLI: faltaban las opciones `--wt-min`/`--wt-max` (provocaba un error
   inmediato si se usaban).
+
+## [1.1.1] — 2026-11-18
+
+### Cambiado
+
+- Nombre del paquete: ampdel → **nanodelfy** (nombre libre en PyPI,
+  elegido por la usuaria; derivado de NanoDel, el desarrollo original).
+  Renombrado el paquete, el ejecutable CLI, los presets, la documentación
+  y los tests. Sin cambios funcionales.

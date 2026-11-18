@@ -1,12 +1,12 @@
-# Contribuir a ampdel
+# Contribuir a nanodelfy
 
 Gracias por tu interés.
 
 ## Desarrollo local
 
 ```bash
-git clone https://github.com/USUARIO/ampdel.git
-cd ampdel
+git clone https://github.com/USUARIO/nanodelfy.git
+cd nanodelfy
 pip install -e . pytest
 pytest
 ```
@@ -17,12 +17,12 @@ incluir o actualizar tests.
 
 ## Qué contribuye
 
-- **Presets**: añade un JSON en `src/ampdel/presets/` con los parámetros
+- **Presets**: añade un JSON en `src/nanodelfy/presets/` con los parámetros
   validados para tu amplicón (sin datos personales de pacientes).
 - **Nucleasas**: las reglas de corte viven en `_NUCLEASE_SPECS`
-  (`src/ampdel/core/microindel.py`); añade la tuya con su bibliografía.
-- **Bugs**: abre un issue con la versión (`ampdel --help` no la muestra;
-  usa `python -c "import ampdel; print(ampdel.__version__)"`), el comando
+  (`src/nanodelfy/core/microindel.py`); añade la tuya con su bibliografía.
+- **Bugs**: abre un issue con la versión (`nanodelfy --help` no la muestra;
+  usa `python -c "import nanodelfy; print(nanodelfy.__version__)"`), el comando
   exacto y, si es posible, un FASTQ mínimo que reproduzca el fallo.
 
 ## Normas

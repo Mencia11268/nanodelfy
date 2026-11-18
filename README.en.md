@@ -1,36 +1,36 @@
-# ampdel
+# nanodelfy
 
-**ampdel** (AMPlicon DELetion) classifies long reads (Nanopore/PacBio) from
+**nanodelfy** (from *NanoDel*, its original development) classifies long reads (Nanopore/PacBio) from
 CRISPR amplicons with large deletions between two cut sites, with support for
 **Cas9 and Cas12a**, amplicons of any size, and deletions from ~120 bp up to
 several kb.
 
-ampdel is the unification of the two NanoDel app versions originally developed
+nanodelfy is the unification of the two NanoDel app versions originally developed
 for the AESC7 and MmC7 amplicons (FRT-FRT deletions), now generalized so any
 lab can analyze its own amplicons.
 
-- Two references: you only need the **WT** amplicon FASTA; ampdel builds the
+- Two references: you only need the **WT** amplicon FASTA; nanodelfy builds the
   EDIT reference (amplicon with the expected deletion) automatically.
 - Per-read classification: WT, exact deletion, extended deletion, deletion with
   insertion, inversion, truncated (non-informative) reads...
 - Microindels around guide cut sites, with Cas9-specific rules (NGG PAM, blunt
   cut) and Cas12a rules (TTTV PAM, staggered cut).
 - Two interfaces: **local web GUI** (drag and drop your FASTQ) and a
-  reproducible **CLI** (`ampdel run`) with JSON presets.
+  reproducible **CLI** (`nanodelfy run`) with JSON presets.
 
 ## Installation
 
 Requirements: Python 3.10+.
 
 ```bash
-pip install ampdel          # from PyPI (once published)
+pip install nanodelfy          # from PyPI (once published)
 ```
 
 From source (this repository):
 
 ```bash
-git clone https://github.com/USER/ampdel.git
-cd ampdel
+git clone https://github.com/USER/nanodelfy.git
+cd nanodelfy
 pip install .
 ```
 
@@ -42,7 +42,7 @@ Dependencies: `mappy` (minimap2 for Python), `pysam`, `pandas`, `openpyxl`,
 ### Web GUI
 
 ```bash
-ampdel web            # opens http://127.0.0.1:8765
+nanodelfy web            # opens http://127.0.0.1:8765
 ```
 
 Upload your FASTQ and the WT amplicon FASTA, enter the expected deletion
@@ -51,7 +51,7 @@ coordinates and guides, and hit Run.
 ### Command line
 
 ```bash
-ampdel run \
+nanodelfy run \
   --fastq sample.fastq.gz \
   --wt amplicon_WT.fa \
   --out output \

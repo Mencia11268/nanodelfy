@@ -1,11 +1,11 @@
-"""Interfaz de línea de comandos de ampdel.
+"""Interfaz de línea de comandos de nanodelfy.
 
 Subcomandos:
-  ampdel run   — ejecuta el pipeline completo sobre una muestra (reproducible)
-  ampdel web   — arranca la interfaz web local (igual que la app original)
+  nanodelfy run   — ejecuta el pipeline completo sobre una muestra (reproducible)
+  nanodelfy web   — arranca la interfaz web local (igual que la app original)
 
 Los parámetros se pasan por opciones CLI o por un JSON de preset
-(--preset). Los presets incluidos (ampdel/presets/*.json) son ejemplos
+(--preset). Los presets incluidos (nanodelfy/presets/*.json) son ejemplos
 reales de los amplicones AESC7 y MmC7 usados en el desarrollo.
 """
 from __future__ import annotations
@@ -98,7 +98,7 @@ def _cmd_web(args: argparse.Namespace) -> None:
     url = f"http://{args.host}:{args.port}"
     print()
     print("=" * 60)
-    print(f"  ampdel web · abre {url} en tu navegador")
+    print(f"  nanodelfy web · abre {url} en tu navegador")
     print("  Pulsa Ctrl+C para detener la aplicación")
     print("=" * 60)
     print()
@@ -117,8 +117,8 @@ def _cmd_web(args: argparse.Namespace) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
-        prog="ampdel",
-        description="ampdel — deleciones CRISPR en amplicones de lecturas largas "
+        prog="nanodelfy",
+        description="nanodelfy — deleciones CRISPR en amplicones de lecturas largas "
                     "(Nanopore/PacBio) con Cas9 o Cas12a.")
     sub = ap.add_subparsers(dest="command", required=True)
 
@@ -130,7 +130,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--out", required=True, help="directorio de salida")
     run.add_argument("--name", default=None, help="nombre de la muestra")
     run.add_argument("--preset", default=None,
-                    help="JSON con parámetros (ver ampdel/presets/)")
+                    help="JSON con parámetros (ver nanodelfy/presets/)")
     run.add_argument("--del-start", type=int, default=None,
                     help="inicio de la deleción esperada (1-based, inclusivo)")
     run.add_argument("--del-end", type=int, default=None,

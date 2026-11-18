@@ -1,7 +1,7 @@
 cff-version: 1.2.0
-message: "Si usas ampdel en tu investigación, cita este repositorio."
+message: "Si usas nanodelfy en tu investigación, cita este repositorio."
 type: software
-title: ampdel
+title: nanodelfy
 version: 1.0.0
 date-released: "2026-11-18"
 license: MIT
@@ -19,8 +19,8 @@ keywords:
   - Cas9
   - Cas12a
   - gene-editing
-repository-code: "https://github.com/USUARIO/ampdel"
+repository-code: "https://github.com/USUARIO/nanodelfy"
 abstract: >-
-  ampdel clasifica lecturas largas (Nanopore/PacBio) de amplicones CRISPR con
+  nanodelfy clasifica lecturas largas (Nanopore/PacBio) de amplicones CRISPR con
   deleciones grandes entre dos puntos de corte, con soporte para Cas9 y Cas12a,
   amplicones de cualquier tamaño y deleciones desde ~120 pb hasta varios kb.
