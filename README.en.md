@@ -1,0 +1,66 @@
+# ampdel
+
+**ampdel** (AMPlicon DELetion) classifies long reads (Nanopore/PacBio) from
+CRISPR amplicons with large deletions between two cut sites, with support for
+**Cas9 and Cas12a**, amplicons of any size, and deletions from ~120 bp up to
+several kb.
+
+ampdel is the unification of the two NanoDel app versions originally developed
+for the AESC7 and MmC7 amplicons (FRT-FRT deletions), now generalized so any
+lab can analyze its own amplicons.
+
+- Two references: you only need the **WT** amplicon FASTA; ampdel builds the
+  EDIT reference (amplicon with the expected deletion) automatically.
+- Per-read classification: WT, exact deletion, extended deletion, deletion with
+  insertion, inversion, truncated (non-informative) reads...
+- Microindels around guide cut sites, with Cas9-specific rules (NGG PAM, blunt
+  cut) and Cas12a rules (TTTV PAM, staggered cut).
+- Two interfaces: **local web GUI** (drag and drop your FASTQ) and a
+  reproducible **CLI** (`ampdel run`) with JSON presets.
+
+## Installation
+
+Requirements: Python 3.10+.
+
+```bash
+pip install ampdel          # from PyPI (once published)
+```
+
+From source (this repository):
+
+```bash
+git clone https://github.com/USER/ampdel.git
+cd ampdel
+pip install .
+```
+
+Dependencies: `mappy` (minimap2 for Python), `pysam`, `pandas`, `openpyxl`,
+`fastapi`, `uvicorn`.
+
+## Quick start
+
+### Web GUI
+
+```bash
+ampdel web            # opens http://127.0.0.1:8765
+```
+
+Upload your FASTQ and the WT amplicon FASTA, enter the expected deletion
+coordinates and guides, and hit Run.
+
+### Command line
+
+```bash
+ampdel run \
+  --fastq sample.fastq.gz \
+  --wt amplicon_WT.fa \
+  --out output \
+  --del-start 1438 --del-end 1557 \
+  --min-sv-deletion 100 \
+  --guides "guide1: CCGAAGTTCCTATTCTCTAG" \
+  --nuclease cas9
+```
+
+See the [Spanish README](README.md) for the full parameter table, output
+specification, per-read classes, presets, and limitations (the Spanish version
+is the primary documentation; this file is a summary).

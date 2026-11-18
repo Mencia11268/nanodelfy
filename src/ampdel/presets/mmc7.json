@@ -1,0 +1,11 @@
+{"description": "Amplicón MmC7 (3887 nt), deleción FRT-FRT 1438-3295, guía FRT, Q>=10, ejecución estructural (parámetros de la entrega)",
+ "deletion_start": 1438, "deletion_end": 3295,
+ "min_quality": 10, "min_length": 800, "max_length": 5000,
+ "breakpoint_tolerance": 50, "nhej_search_window": 500,
+ "min_junction_insertion": 5, "min_sv_deletion": 1500,
+ "min_edit_ref_coverage": 0.80, "min_mapq": 20,
+ "wt_min": 3600, "wt_max": 4100,
+ "guides": "FRT: CCGAAGTTCCTATTCTCTAG",
+ "nuclease": "cas9", "frt_analysis": true,
+ "microindel_window": 20, "microindel_max_indel": 50,
+ "microindel_large_del_threshold": 100}

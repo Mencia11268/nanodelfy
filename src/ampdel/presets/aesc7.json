@@ -1,0 +1,11 @@
+{"description": "Amplicón AESC7 (3117 nt), deleción FRT-FRT 1157-2981, guía FRT Cas9-like, Q>=7 (parámetros de la entrega original)",
+ "deletion_start": 1157, "deletion_end": 2981,
+ "min_quality": 7, "min_length": 200, "max_length": 3500,
+ "breakpoint_tolerance": 50, "nhej_search_window": 500,
+ "min_junction_insertion": 5, "min_sv_deletion": 1500,
+ "min_edit_ref_coverage": 0.80, "min_mapq": 20,
+ "wt_min": 2800, "wt_max": 3200,
+ "guides": "FRT: TCCTATTCTCTAGAAAGTAT",
+ "nuclease": "cas9",
+ "microindel_window": 20, "microindel_max_indel": 50,
+ "microindel_large_del_threshold": 100}

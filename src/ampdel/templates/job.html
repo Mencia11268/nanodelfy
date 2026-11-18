@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NanoDel · {{ job.sample_name }}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>{{ job.sample_name }}
+      <span id="status-pill" class="status-pill status-running">en marcha</span>
+    </h1>
+    <div class="subtitle">
+      Trabajo {{ job_id }} · iniciado {{ job.created_at }} ·
+      <a href="/">← nuevo análisis</a>
+    </div>
+  </header>
+
+  <div class="card">
+    <h2>Progreso</h2>
+    <div class="progress-wrap"><div class="progress-bar" id="progress"></div></div>
+    <div class="stage-label" id="stage">Iniciando…</div>
+    <pre class="log" id="log"></pre>
+  </div>
+
+  <div id="error-section" style="display:none">
+    <div class="card">
+      <h2>Error</h2>
+      <div class="error-box" id="error-msg"></div>
+    </div>
+  </div>
+
+  <div id="results-section" style="display:none">
+
+    <div class="card">
+      <h2>Resumen de clasificación</h2>
+      <table class="results" id="summary-table">
+        <thead>
+          <tr><th>Clase</th><th>Descripción</th>
+              <th class="num">Lecturas</th><th class="num">Frecuencia (%)</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="info-box" style="margin-top: 16px;">
+        <b>DEL_ANY</b> = suma de todas las deleciones (exactas + imprecisas).
+        <b>EDITED_ANY</b> = deleciones grandes e inversiones detectadas
+        (DEL_ANY + INV). No incluye microindels; la eficiencia de edición
+        con microindels se reporta aparte en la sección de microindels por
+        sitio de corte.
+      </div>
+    </div>
+
+    <div class="card" id="micro-section" style="display:none">
+      <h2>Microindels en cortes de guía</h2>
+      <table class="results" id="micro-table">
+        <thead>
+          <tr><th>Sitio</th><th>Corte (1-based)</th><th class="num">Evaluables</th>
+              <th class="num">Con microindel</th><th class="num">% microindel</th>
+              <th class="num">Sitio en deleción grande</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="info-box" style="margin-top: 16px;">
+        <b>Evaluables</b> = lecturas que atraviesan la ventana del corte sin estar afectadas
+        por una deleción estructural. Los indels de 1 nt incluyen ruido Nanopore: consulta la
+        tabla de alelos y la calidad media de los eventos antes de atribuirlos a NHEJ.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Descargas</h2>
+      <div class="download-grid">
+        <a href="" id="dl-igv">
+          <div class="title">📦 BAMs para IGV (.zip)</div>
+          <div class="desc">Incluye BAMs + .bai + FASTA + .fai</div>
+        </a>
+        <a href="" id="dl-xlsx">
+          <div class="title">📊 Resultados (Excel)</div>
+          <div class="desc">Resumen + clasificación por lectura</div>
+        </a>
+        <a href="" id="dl-summary">
+          <div class="title">📄 Resumen (TSV)</div>
+          <div class="desc">Frecuencias por clase</div>
+        </a>
+        <a href="" id="dl-perread">
+          <div class="title">📄 Clasificación por lectura (TSV)</div>
+          <div class="desc">Una fila por lectura con regla aplicada</div>
+        </a>
+        <a href="" id="dl-micro-summary">
+          <div class="title">📄 Microindels: resumen (TSV)</div>
+          <div class="desc">Por sitio de corte de guía</div>
+        </a>
+        <a href="" id="dl-micro-read">
+          <div class="title">📄 Microindels: por lectura (TSV)</div>
+          <div class="desc">Eventos con posición y calidad</div>
+        </a>
+        <a href="" id="dl-micro-alleles">
+          <div class="title">📄 Microindels: alelos (TSV)</div>
+          <div class="desc">Contexto de unión para verificación</div>
+        </a>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Cómo abrir los BAMs en IGV</h2>
+      <ol style="margin: 8px 0 0; padding-left: 20px; font-size: 14px;">
+        <li>Descomprime el zip de BAMs.</li>
+        <li>En IGV: <b>Genomes → Load Genome from File</b> → <code>amplicon_WT.fa</code></li>
+        <li><b>File → Load from File</b> → <code>{{ job.sample_name }}.WT.bam</code></li>
+        <li>Para validar la deleción exacta: carga <code>amplicon_EDIT.fa</code> como genoma
+            y abre <code>{{ job.sample_name }}.EDIT.bam</code> encima.</li>
+      </ol>
+    </div>
+
+  </div>
+</div>
+
+<footer>NanoDel · ejecución 100% local · v1.0</footer>
+
+<script>
+  const jobId = "{{ job_id }}";
+  // Las descripciones vienen ya del backend (campo 'description')
+  const AGGREGATE = new Set(['DEL_ANY', 'EDITED_ANY', 'TOTAL']);
+
+  function renderSummary(summary) {
+    const tb = document.querySelector('#summary-table tbody');
+    tb.innerHTML = '';
+    summary.forEach(row => {
+      const tr = document.createElement('tr');
+      const cls = row['class'];
+      tr.innerHTML = `
+        <td><span class="cls-${cls}">${cls}</span></td>
+        <td>${row.description || ''}</td>
+        <td class="num">${row.reads}</td>
+        <td class="num">${row.frequency_pct.toFixed(2)}</td>`;
+      if (AGGREGATE.has(cls)) {
+        tr.style.fontWeight = 'bold';
+        tr.style.background = (cls === 'TOTAL') ? '#f3f4f6' : '#eff6ff';
+      }
+      tb.appendChild(tr);
+    });
+  }
+
+  function showResults(job) {
+    document.getElementById('results-section').style.display = '';
+    renderSummary(job.result.classification.summary);
+    document.getElementById('dl-igv').href     = `/api/download/${jobId}/igv_zip`;
+    document.getElementById('dl-xlsx').href    = `/api/download/${jobId}/excel`;
+    document.getElementById('dl-summary').href = `/api/download/${jobId}/summary_tsv`;
+    document.getElementById('dl-perread').href = `/api/download/${jobId}/perread_tsv`;
+    if (job.result.microindels) {
+      document.getElementById('micro-section').style.display = '';
+      const tb = document.querySelector('#micro-table tbody');
+      tb.innerHTML = '';
+      job.result.microindels.summary.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${row.sitio}</td>
+          <td>${row.corte_1based}</td>
+          <td class="num">${row.evaluables}</td>
+          <td class="num">${row.con_microindel}</td>
+          <td class="num">${row.pct_microindel_sobre_evaluables}%</td>
+          <td class="num">${row.sitio_eliminado_por_deleccion_grande}</td>`;
+        tb.appendChild(tr);
+      });
+      document.getElementById('dl-micro-summary').href = `/api/download/${jobId}/micro_summary`;
+      document.getElementById('dl-micro-read').href    = `/api/download/${jobId}/micro_per_read`;
+      document.getElementById('dl-micro-alleles').href = `/api/download/${jobId}/micro_alleles`;
+    }
+  }
+
+  async function poll() {
+    try {
+      const r = await fetch('/api/job/' + jobId);
+      const j = await r.json();
+      document.getElementById('progress').style.width = j.progress + '%';
+      document.getElementById('stage').textContent    = j.stage;
+      document.getElementById('log').textContent      = (j.log || []).join('\n');
+      document.getElementById('log').scrollTop = 1e9;
+
+      const pill = document.getElementById('status-pill');
+      if (j.status === 'done') {
+        pill.className = 'status-pill status-done';
+        pill.textContent = 'completado';
+        showResults(j);
+        return;
+      } else if (j.status === 'error') {
+        pill.className = 'status-pill status-error';
+        pill.textContent = 'error';
+        document.getElementById('error-section').style.display = '';
+        document.getElementById('error-msg').textContent = j.error || 'Error';
+        return;
+      }
+      setTimeout(poll, 1500);
+    } catch (e) {
+      setTimeout(poll, 3000);
+    }
+  }
+  poll();
+</script>
+</body>
+</html>

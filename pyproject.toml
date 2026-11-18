@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ampdel"
+version = "1.0.0"
+description = "Deleciones CRISPR en amplicones de lecturas largas (Nanopore/PacBio) con Cas9 o Cas12a"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Angeles Mencia" }]
+keywords = ["crispr", "nanopore", "long-read", "amplicon", "deletion", "cas9", "cas12a", "editing"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+dependencies = [
+    "mappy>=2.24",
+    "pysam>=0.21",
+    "pandas>=1.5",
+    "openpyxl>=3.1",
+    "fastapi>=0.100",
+    "uvicorn>=0.20",
+    "python-multipart>=0.0.6",
+]
+
+[project.scripts]
+ampdel = "ampdel.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+ampdel = ["templates/*.html", "static/*", "presets/*.json"]

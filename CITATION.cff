@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+message: "Si usas ampdel en tu investigación, cita este repositorio."
+type: software
+title: ampdel
+version: 1.0.0
+date-released: "2026-11-18"
+license: MIT
+authors:
+  - family-names: Mencia
+    given-names: Angeles
+    email: angeles.mencia@ciemat.es
+    affiliation: CIEMAT
+keywords:
+  - CRISPR
+  - nanopore
+  - long-read
+  - amplicon
+  - deletion
+  - Cas9
+  - Cas12a
+  - gene-editing
+repository-code: "https://github.com/USUARIO/ampdel"
+abstract: >-
+  ampdel clasifica lecturas largas (Nanopore/PacBio) de amplicones CRISPR con
+  deleciones grandes entre dos puntos de corte, con soporte para Cas9 y Cas12a,
+  amplicones de cualquier tamaño y deleciones desde ~120 pb hasta varios kb.
