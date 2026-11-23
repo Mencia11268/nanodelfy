@@ -5,7 +5,7 @@ Gracias por tu interés.
 ## Desarrollo local
 
 ```bash
-git clone https://github.com/USUARIO/nanodelfy.git
+git clone https://github.com/Mencia11268/nanodelfy.git
 cd nanodelfy
 pip install -e . pytest
 pytest

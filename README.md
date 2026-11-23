@@ -30,7 +30,7 @@ pip install nanodelfy          # desde PyPI (cuando se publique)
 Desde el código fuente (este repositorio):
 
 ```bash
-git clone https://github.com/USUARIO/nanodelfy.git
+git clone https://github.com/Mencia11268/nanodelfy.git
 cd nanodelfy
 pip install .
 ```

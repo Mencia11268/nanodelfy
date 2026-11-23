@@ -29,7 +29,7 @@ pip install nanodelfy          # from PyPI (once published)
 From source (this repository):
 
 ```bash
-git clone https://github.com/USER/nanodelfy.git
+git clone https://github.com/Mencia11268/nanodelfy.git
 cd nanodelfy
 pip install .
 ```

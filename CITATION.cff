@@ -19,7 +19,7 @@ keywords:
   - Cas9
   - Cas12a
   - gene-editing
-repository-code: "https://github.com/USUARIO/nanodelfy"
+repository-code: "https://github.com/Mencia11268/nanodelfy"
 abstract: >-
   nanodelfy clasifica lecturas largas (Nanopore/PacBio) de amplicones CRISPR con
   deleciones grandes entre dos puntos de corte, con soporte para Cas9 y Cas12a,
