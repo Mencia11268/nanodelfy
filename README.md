@@ -35,8 +35,12 @@ cd nanodelfy
 pip install .
 ```
 
-Dependencias: `mappy` (alineador minimap2 para Python), `pysam`, `pandas`,
-`openpyxl`, `fastapi`, `uvicorn`.
+Dependencias: `mappy` (alineador minimap2 para Python), `biopython`, `pandas`,
+`openpyxl`, `fastapi`, `uvicorn`. La escritura de BAM es en Python puro (no
+necesita samtools ni pysam).
+
+En **Windows**, `mappy` no tiene binarios precompilados: usa el subsistema WSL
+(o conda) para instalar nanodelfy.
 
 ## Inicio rápido
 

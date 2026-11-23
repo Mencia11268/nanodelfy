@@ -91,3 +91,14 @@ Primera versión pública. nanodelfy unifica y generaliza la app NanoDel
   elegido por la usuaria; derivado de NanoDel, el desarrollo original).
   Renombrado el paquete, el ejecutable CLI, los presets, la documentación
   y los tests. Sin cambios funcionales.
+
+## [1.1.2] — 2026-11-23
+
+### Corregido
+
+- Dependencias de instalación: faltaba `biopython` (usada por
+  `refs.py`/`pipeline.py`) y se eliminó `pysam`, que no se usa (la
+  escritura de BAM es en Python puro). Instalar desde cero fallaba
+  sin estos cambios.
+- CI: matriz reducida a ubuntu + macos (en Windows `mappy` no tiene
+  binarios precompilados; se documenta usar WSL o conda).
