@@ -71,7 +71,17 @@
 
     <div class="card">
       <h2>Descargas</h2>
+      <div class="info-box" style="margin-bottom: 14px;">
+        <b>Descarga los resultados ahora.</b> En el alojamiento gratuito la app se
+        apaga tras unos minutos de inactividad y los archivos de este análisis se
+        eliminan. El botón «Descargar todo» empaqueta todos los resultados en un
+        único ZIP.
+      </div>
       <div class="download-grid">
+        <a href="" id="dl-all" style="border: 2px solid #2563eb;">
+          <div class="title">⬇️ Descargar todo (.zip)</div>
+          <div class="desc">Todos los resultados en un único archivo</div>
+        </a>
         <a href="" id="dl-igv">
           <div class="title">📦 BAMs para IGV (.zip)</div>
           <div class="desc">Incluye BAMs + .bai + FASTA + .fai</div>
@@ -146,6 +156,7 @@
   function showResults(job) {
     document.getElementById('results-section').style.display = '';
     renderSummary(job.result.classification.summary);
+    document.getElementById('dl-all').href     = `/api/download/${jobId}/all`;
     document.getElementById('dl-igv').href     = `/api/download/${jobId}/igv_zip`;
     document.getElementById('dl-xlsx').href    = `/api/download/${jobId}/excel`;
     document.getElementById('dl-summary').href = `/api/download/${jobId}/summary_tsv`;
@@ -199,6 +210,11 @@
     }
   }
   poll();
+
+  // Latido: mientras esta pestaña esté abierta, la app no se queda dormida
+  // (el plan gratuito se apaga tras ~15 min de inactividad y perdería los
+  // resultados de este trabajo).
+  setInterval(() => fetch('/', {method: 'HEAD'}).catch(() => {}), 4 * 60 * 1000);
 </script>
 </body>
 </html>

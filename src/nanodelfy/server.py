@@ -184,6 +184,21 @@ def api_download(job_id: str, kind: str):
         raise HTTPException(404, "Trabajo no encontrado")
     if job["status"] != "done":
         raise HTTPException(400, "El trabajo aún no ha terminado")
+
+    if kind == "all":
+        """Zip con todos los resultados del trabajo (una sola descarga)."""
+        import zipfile
+        job_dir = Path(job["job_dir"])
+        zip_path = job_dir / f"{job['sample_name']}_resultados.zip"
+        if not zip_path.exists():
+            results_dir = job_dir / "results"
+            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                for p in sorted(results_dir.rglob("*")):
+                    if p.is_file():
+                        zf.write(p, p.relative_to(results_dir.parent))
+        return FileResponse(zip_path, filename=zip_path.name,
+                            media_type="application/zip")
+
     files = job["result"]["files"]
     if kind not in files:
         raise HTTPException(404, f"Tipo de archivo desconocido: {kind}")
