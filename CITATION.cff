@@ -10,6 +10,12 @@ authors:
     given-names: Angeles
     email: angeles.mencia@ciemat.es
     affiliation: CIEMAT
+  - family-names: Murillas
+    given-names: Rodolfo
+    affiliation: CIEMAT
+  - family-names: Garcia Diez
+    given-names: Marta
+    affiliation: CIEMAT
 keywords:
   - CRISPR
   - nanopore
@@ -20,6 +26,13 @@ keywords:
   - Cas12a
   - gene-editing
 repository-code: "https://github.com/Mencia11268/nanodelfy"
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.24498244
+    description: "DOI de la versión 1.1.2 (Zenodo)"
+  - type: doi
+    value: 10.5281/zenodo.24498243
+    description: "DOI de concepto (todas las versiones)"
 abstract: >-
   nanodelfy clasifica lecturas largas (Nanopore/PacBio) de amplicones CRISPR con
   deleciones grandes entre dos puntos de corte, con soporte para Cas9 y Cas12a,

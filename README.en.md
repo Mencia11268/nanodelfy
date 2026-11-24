@@ -1,5 +1,7 @@
 # nanodelfy
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24498244.svg)](https://doi.org/10.5281/zenodo.24498244)
+
 **nanodelfy** (from *NanoDel*, its original development) classifies long reads (Nanopore/PacBio) from
 CRISPR amplicons with large deletions between two cut sites, with support for
 **Cas9 and Cas12a**, amplicons of any size, and deletions from ~120 bp up to
@@ -64,3 +66,14 @@ nanodelfy run \
 See the [Spanish README](README.md) for the full parameter table, output
 specification, per-read classes, presets, and limitations (the Spanish version
 is the primary documentation; this file is a summary).
+
+## Citation
+
+If you use nanodelfy, please cite the version archived on Zenodo:
+
+> Mencia, A., Murillas, R., & Garcia Diez, M. (2026). nanodelfy 1.1.2.
+> Zenodo. https://doi.org/10.5281/zenodo.24498244
+
+To refer to all versions, use the concept DOI:
+https://doi.org/10.5281/zenodo.24498243. Citation metadata is available in
+`CITATION.cff`.
