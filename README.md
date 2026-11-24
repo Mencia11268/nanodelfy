@@ -21,6 +21,21 @@ amplicones.
 - Dos interfaces: **web local** (arrastra y suelta tu FASTQ) y **CLI**
   reproducible (`nanodelfy run`), con presets JSON.
 
+## Versión web alojada (sin instalación)
+
+Puedes usar la interfaz web de nanodelfy sin instalar nada, desplegándola
+gratis en tu propia cuenta de Render (no requiere tarjeta; el servicio se
+duerme tras 15 minutos de inactividad y despierta solo al recibir una
+visita):
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Mencia11268/nanodelfy)
+
+Pulsa el botón, crea una cuenta gratuita (o inicia sesión), confirma el
+plan gratuito y espera unos minutos a que se construya. Obtendrás una URL
+pública tipo `https://nanodelfy-xxxx.onrender.com` lista para compartir con
+otros usuarios. Sube las muestras en formato `.fastq.gz` (comprimido) para
+minimizar el tiempo de subida.
+
 ## Instalación
 
 Requisitos: Python 3.10 o superior.

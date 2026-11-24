@@ -20,6 +20,15 @@ lab can analyze its own amplicons.
 - Two interfaces: **local web GUI** (drag and drop your FASTQ) and a
   reproducible **CLI** (`nanodelfy run`) with JSON presets.
 
+## Hosted web version (no installation)
+
+The web interface can be used without installing anything by deploying it
+for free to your own Render account (no credit card required; the service
+sleeps after 15 minutes of inactivity and wakes up automatically on the
+next visit):
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Mencia11268/nanodelfy)
+
 ## Installation
 
 Requirements: Python 3.10+.
