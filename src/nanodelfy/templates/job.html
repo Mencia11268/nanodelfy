@@ -142,14 +142,14 @@
   function renderSummary(summary) {
     const tb = document.querySelector('#summary-table tbody');
     tb.innerHTML = '';
-    summary.forEach(row => {
+    (summary || []).forEach(row => {
       const tr = document.createElement('tr');
       const cls = row['class'];
       tr.innerHTML = `
         <td><span class="cls-${cls}">${cls}</span></td>
         <td>${row.description || ''}</td>
         <td class="num">${row.reads}</td>
-        <td class="num">${row.frequency_pct.toFixed(2)}</td>`;
+        <td class="num">${(row.frequency_pct ?? 0).toFixed(2)}</td>`;
       if (AGGREGATE.has(cls)) {
         tr.style.fontWeight = 'bold';
         tr.style.background = (cls === 'TOTAL') ? '#f3f4f6' : '#eff6ff';
@@ -160,7 +160,9 @@
 
   function showResults(job) {
     document.getElementById('results-section').style.display = '';
-    renderSummary(job.result.classification.summary);
+
+    // Los enlaces de descarga se activan PRIMERO: así, aunque falle el
+    // renderizado de alguna tabla, los botones siempre funcionan.
     document.getElementById('dl-all').href     = `/api/download/${jobId}/all`;
     document.getElementById('dl-direct-url').textContent =
       location.origin + `/api/download/${jobId}/all`;
@@ -168,7 +170,14 @@
     document.getElementById('dl-xlsx').href    = `/api/download/${jobId}/excel`;
     document.getElementById('dl-summary').href = `/api/download/${jobId}/summary_tsv`;
     document.getElementById('dl-perread').href = `/api/download/${jobId}/perread_tsv`;
+
+    try {
+      renderSummary(job.result.classification.summary);
+    } catch (e) {
+      console.error('renderSummary', e);
+    }
     if (job.result.microindels) {
+      try {
       document.getElementById('micro-section').style.display = '';
       const tb = document.querySelector('#micro-table tbody');
       tb.innerHTML = '';
@@ -186,6 +195,9 @@
       document.getElementById('dl-micro-summary').href = `/api/download/${jobId}/micro_summary`;
       document.getElementById('dl-micro-read').href    = `/api/download/${jobId}/micro_per_read`;
       document.getElementById('dl-micro-alleles').href = `/api/download/${jobId}/micro_alleles`;
+      } catch (e) {
+        console.error('microindels', e);
+      }
     }
   }
 
