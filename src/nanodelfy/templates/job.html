@@ -111,6 +111,11 @@
           <div class="desc">Contexto de unión para verificación</div>
         </a>
       </div>
+      <div class="info-box" style="margin-top: 16px;">
+        Si un botón no descarga nada, copia este enlace y ábrelo en una pestaña
+        nueva (o usa clic derecho → «Guardar destino como»):<br>
+        <code id="dl-direct-url" style="word-break: break-all;"></code>
+      </div>
     </div>
 
     <div class="card">
@@ -157,6 +162,8 @@
     document.getElementById('results-section').style.display = '';
     renderSummary(job.result.classification.summary);
     document.getElementById('dl-all').href     = `/api/download/${jobId}/all`;
+    document.getElementById('dl-direct-url').textContent =
+      location.origin + `/api/download/${jobId}/all`;
     document.getElementById('dl-igv').href     = `/api/download/${jobId}/igv_zip`;
     document.getElementById('dl-xlsx').href    = `/api/download/${jobId}/excel`;
     document.getElementById('dl-summary').href = `/api/download/${jobId}/summary_tsv`;
