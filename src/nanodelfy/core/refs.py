@@ -1,9 +1,38 @@
 """Genera la referencia editada (post-deleción) a partir del FASTA WT."""
 from __future__ import annotations
+import io
 from pathlib import Path
 from Bio import SeqIO
 from Bio.SeqRecord import SeqRecord
 from Bio.Seq import Seq
+
+
+def decode_fasta_bytes(data: bytes) -> str:
+    """Decodifica el contenido de un FASTA de forma tolerante.
+
+    Acepta UTF-8, UTF-16 (con BOM, típico de Bloc de notas de Windows)
+    y, como último recurso, latin-1/cp1252 (acentos, comillas tipográficas
+    u otros caracteres pegados desde Word). Antes, un FASTA guardado en
+    Windows hacía fallar el análisis con un UnicodeDecodeError.
+    """
+    if data.startswith(b"\xff\xfe") or data.startswith(b"\xfe\xff"):
+        return data.decode("utf-16")
+    try:
+        return data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return data.decode("latin-1")
+
+
+def parse_first_fasta_record(path):
+    """Devuelve el primer registro de un FASTA, con decodificación robusta."""
+    text = decode_fasta_bytes(Path(path).read_bytes())
+    if not text.lstrip().startswith(">"):
+        raise ValueError(
+            f"El archivo '{path}' no parece un FASTA válido: debe empezar "
+            "por '>'. Si has pegado la secuencia desde Word o similar, "
+            "guárdala como texto plano (.fa/.txt) e inténtalo de nuevo."
+        )
+    return next(SeqIO.parse(io.StringIO(text), "fasta"))
 
 
 def write_fasta_index(fa: Path):
@@ -20,7 +49,7 @@ def write_fasta_index(fa: Path):
             if linea.startswith(b">"):
                 if nombre is not None:
                     filas.append((nombre, longitud, offset, bases_linea, bytes_linea))
-                nombre = linea[1:].split()[0].decode("ascii")
+                nombre = decode_fasta_bytes(linea[1:].split()[0])
                 longitud = 0
                 offset = f.tell()
                 bases_linea = bytes_linea = 0
@@ -33,7 +62,7 @@ def write_fasta_index(fa: Path):
         filas.append((nombre, longitud, offset, bases_linea, bytes_linea))
     Path(str(fa) + ".fai").write_text(
         "".join("\t".join(map(str, fila)) + "\n" for fila in filas),
-        encoding="ascii")
+        encoding="utf-8")
 
 
 def build_edited_reference(wt_fa: Path, edit_fa: Path,
@@ -43,7 +72,7 @@ def build_edited_reference(wt_fa: Path, edit_fa: Path,
     al amplicón WT y guarda el resultado en edit_fa.
     Devuelve un dict con estadísticas.
     """
-    rec = next(SeqIO.parse(str(wt_fa), "fasta"))
+    rec = parse_first_fasta_record(wt_fa)
     seq = str(rec.seq).upper()
     wt_len = len(seq)
 

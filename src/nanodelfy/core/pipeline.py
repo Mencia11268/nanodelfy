@@ -66,8 +66,8 @@ def run_full_pipeline(
     set_progress(85, "Clasificando lecturas")
     log("[4/4] Clasificando lecturas...")
     # Parche R3EB_B: secuencia WT para reconstruir uniones desde soft-clips
-    from Bio import SeqIO as _SeqIO
-    wt_seq = str(next(_SeqIO.parse(str(wt_fa), "fasta")).seq).upper()
+    from .refs import parse_first_fasta_record
+    wt_seq = str(parse_first_fasta_record(wt_fa).seq).upper()
     p = Params(
         deletion_start=params["deletion_start"],
         deletion_end=params["deletion_end"],
