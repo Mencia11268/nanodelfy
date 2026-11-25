@@ -179,6 +179,13 @@
   const AGGREGATE = new Set(['DEL_ANY', 'EDITED_ANY', 'TOTAL']);
 
   // ---------- Gráficos de barras SVG (sin dependencias externas) ----------
+  // Los valores del backend pueden llegar como número, texto ("0.00") o
+  // vacío (p. ej. CALIB_EXP_FP): coercionamos siempre a número.
+  function toNum(v) {
+    const n = typeof v === 'number' ? v : parseFloat(v);
+    return Number.isFinite(n) ? n : null;
+  }
+
   function barChart(containerId, rows, color) {
     // rows: [{label, value, pct}] — pct en [0, 100]
     const el = document.getElementById(containerId);
@@ -193,7 +200,9 @@
       const barW = Math.max(2, r.pct * scale);
       svg += `<text x="${padL - 10}" y="${y + 14}" text-anchor="end" font-size="12" fill="#374151">${r.label}</text>`;
       svg += `<rect x="${padL}" y="${y}" width="${barW}" height="19" rx="3" fill="${r.color || color}"></rect>`;
-      svg += `<text x="${padL + barW + 6}" y="${y + 14}" font-size="12" fill="#111827">${r.pct.toFixed(2)}% (${r.value})</text>`;
+      const pctTxt = toNum(r.pct) === null ? 'n/d' : r.pct.toFixed(2) + '%';
+      const valTxt = toNum(r.value) === null ? 'n/d' : '(' + r.value + ')';
+      svg += `<text x="${padL + barW + 6}" y="${y + 14}" font-size="12" fill="#111827">${pctTxt} ${valTxt}</text>`;
     });
     svg += '</svg>';
     el.innerHTML = svg;
@@ -209,8 +218,8 @@
       .filter(r => !AGGREGATE.has(r['class']) && r['class'] !== 'TOTAL')
       .map(r => ({
         label: r['class'],
-        value: r.reads,
-        pct: r.frequency_pct ?? 0,
+        value: toNum(r.reads),
+        pct: toNum(r.frequency_pct) ?? 0,
         color: CLS_COLORS[r['class']] || '#f59e0b',
       }));
     barChart('chart-classes', rows, '#3b82f6');
@@ -242,11 +251,12 @@
     (summary || []).forEach(row => {
       const tr = document.createElement('tr');
       const cls = row['class'];
+      const fp = toNum(row.frequency_pct);
       tr.innerHTML = `
         <td><span class="cls-${cls}">${cls}</span></td>
         <td>${row.description || ''}</td>
         <td class="num">${row.reads}</td>
-        <td class="num">${(row.frequency_pct ?? 0).toFixed(2)}</td>`;
+        <td class="num">${fp === null ? 'n/d' : fp.toFixed(2)}</td>`;
       if (AGGREGATE.has(cls)) {
         tr.style.fontWeight = 'bold';
         tr.style.background = (cls === 'TOTAL') ? '#f3f4f6' : '#eff6ff';
