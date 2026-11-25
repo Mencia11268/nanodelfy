@@ -134,6 +134,13 @@
           Se busca en ambas hebras del amplicón. Deja vacío para omitir el análisis.</div>
       </div>
       <div class="field">
+        <label>Tolerancia de discrepancias guía-WT</label>
+        <input type="number" name="guide_max_mismatch" value="1" min="0" max="3">
+        <div class="hint">Discrepancias permitidas entre la guía y el amplicón WT.
+          Útil para guías específicas de un alelo que difiera en alguna base del
+          salvaje (0 = coincidencia exacta).</div>
+      </div>
+      <div class="field">
         <label>Calibración estadística del ruido</label>
         <select name="calibration">
           <option value="true" selected>Activada — p-valores empíricos con las lecturas WT de la muestra</option>

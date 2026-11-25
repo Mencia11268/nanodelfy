@@ -106,6 +106,7 @@ def run_full_pipeline(
                 large_del_threshold=params.get("microindel_large_del_threshold", 100),
                 min_mapq=params.get("min_mapq", 20),
                 nuclease=params.get("nuclease", "cas9"),
+                guide_max_mismatch=params.get("guide_max_mismatch", 1),
                 log=log,
             )
         else:

@@ -84,3 +84,33 @@ def test_aviso_protospacer_atipico(capsys):
     # p=4, L=22: nicks 4+22-18=8 y 4+22-23=3 → región (3, 8), 5 nt
     assert neg.cut_region == (3, 8)
     assert "AVISO" in capsys.readouterr().out
+
+
+def test_guia_con_una_discrepancia_vs_wt():
+    """Guía específica de un alelo que difiere en 1 base del WT."""
+    guia_alelo = FRT_GUIDE[:10] + \
+        ("A" if FRT_GUIDE[10] != "A" else "C") + FRT_GUIDE[11:]
+    assert guia_alelo != FRT_GUIDE and len(guia_alelo) == len(FRT_GUIDE)
+
+    # Con tolerancia 1 se localiza en el mismo sitio que la WT
+    sites = locate_cut_sites(WT, parse_guides(f"alelo: {guia_alelo}"),
+                            nuclease="cas9", max_mismatch=1)
+    assert len(sites) == 1
+    assert sites[0].mismatches == 1
+    sites_wt = locate_cut_sites(WT, parse_guides(f"wt: {FRT_GUIDE}"),
+                                nuclease="cas9")
+    assert sites[0].cut_pos == sites_wt[0].cut_pos
+
+    # Con tolerancia 0 (exacta) NO se localiza
+    with pytest.raises(ValueError):
+        locate_cut_sites(WT, parse_guides(f"alelo: {guia_alelo}"),
+                         nuclease="cas9", max_mismatch=0)
+
+
+def test_discrepancia_hebra_negativa():
+    """La tolerancia también aplica en la hebra negativa."""
+    guia = revcomp(FRT_GUIDE)
+    guia_alelo = guia[:5] + ("G" if guia[5] != "G" else "T") + guia[6:]
+    sites = locate_cut_sites(WT, parse_guides(f"neg_mm: {guia_alelo}"),
+                            nuclease="cas9", max_mismatch=1)
+    assert any(s.strand == "-" and s.mismatches == 1 for s in sites)

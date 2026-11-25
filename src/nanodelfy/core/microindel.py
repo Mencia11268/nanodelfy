@@ -75,6 +75,7 @@ class CutSite:
     nuclease: str = "cas9"
     cut_nick_a: Optional[int] = None  # nick PAM-proximal (cortes escalonados)
     cut_nick_b: Optional[int] = None  # nick PAM-distal
+    mismatches: int = 0               # discrepancias guía vs amplicón WT
 
     @property
     def cut_region(self) -> Tuple[int, int]:
@@ -133,8 +134,32 @@ def _normalize_nuclease(nuclease: str) -> str:
     return aliases[n]
 
 
+def _find_matches_fuzzy(ref: str, guide: str, max_mm: int) -> List[tuple]:
+    """Posiciones 0-based donde `guide` alinea con ≤ max_mm discrepancias.
+
+    Busca en la hebra dada de `ref` (para la hebra '-' se pasa ya el
+    revcomp de la guía). Devuelve una lista de (posicion, n_discrepancias)
+    ordenada por posición. Con max_mm=0 equivale a la búsqueda exacta.
+    """
+    L = len(guide)
+    out = []
+    if L == 0 or max_mm < 0:
+        return out
+    for p in range(len(ref) - L + 1):
+        mm = 0
+        for a, b in zip(ref[p:p + L], guide):
+            if a != b:
+                mm += 1
+                if mm > max_mm:
+                    break
+        if mm <= max_mm:
+            out.append((p, mm))
+    return out
+
+
 def locate_cut_sites(ref_seq: str, guides: Dict[str, str],
                     nuclease: str = "cas9",
+                    max_mismatch: int = 1,
                     log=print) -> List[CutSite]:
     """Localiza cada guía en el amplicón (ambas hebras, todas las copias).
 
@@ -146,6 +171,9 @@ def locate_cut_sites(ref_seq: str, guides: Dict[str, str],
     Para cortes escalonados, `cut_pos` es el centro de la región de corte
     (la ventana de análisis ±window la cubre por completo) y `cut_region`
     devuelve los dos nicks extremos.
+
+    `max_mismatch` permite guías específicas de un alelo que difiera en
+    alguna base del amplicón WT (0 = coincidencia exacta).
     """
     nuc = _normalize_nuclease(nuclease)
     spec = _NUCLEASE_SPECS[nuc]
@@ -163,11 +191,7 @@ def locate_cut_sites(ref_seq: str, guides: Dict[str, str],
                 f"(se esperaban {' o '.join(map(str, L_g))} para {nuc}); "
                 f"se aplican las distancias de corte de {nuc} igualmente")
         # ------- hebra '+': PAM aguas abajo (cas9) o aguas arriba (cas12a)
-        start = 0
-        while True:
-            p = ref.find(g, start)
-            if p < 0:
-                break
+        for p, mm in _find_matches_fuzzy(ref, g, max_mismatch):
             if nuc == "cas9":
                 pam = ref[p + len(g): p + len(g) + pam_len]
             else:  # cas12a: PAM inmediatamente 5' del protospacer
@@ -176,20 +200,16 @@ def locate_cut_sites(ref_seq: str, guides: Dict[str, str],
             if nuc == "cas9":
                 cut = p + nick_prox
                 sites.append(CutSite(label, g, "+", p, pam, pam_ok, cut,
-                                     nuclease=nuc))
+                                     nuclease=nuc, mismatches=mm))
             else:
                 nick1, nick2 = p + nick_prox, p + nick_dist
                 sites.append(CutSite(label, g, "+", p, pam, pam_ok,
                                     (nick1 + nick2) // 2, nuclease=nuc,
-                                    cut_nick_a=nick1, cut_nick_b=nick2))
-            start = p + 1
+                                    cut_nick_a=nick1, cut_nick_b=nick2,
+                                    mismatches=mm))
         # ------- hebra '-': espejo (PAM en el extremo opuesto)
         gr = revcomp(g)
-        start = 0
-        while True:
-            p = ref.find(gr, start)
-            if p < 0:
-                break
+        for p, mm in _find_matches_fuzzy(ref, gr, max_mismatch):
             if nuc == "cas9":
                 pam = revcomp(ref[max(0, p - pam_len):p]) if p >= pam_len else ""
             else:  # cas12a: PAM aguas abajo en la hebra + (revcomp = TTTV)
@@ -198,7 +218,7 @@ def locate_cut_sites(ref_seq: str, guides: Dict[str, str],
             if nuc == "cas9":
                 cut = p + len(g) - nick_prox
                 sites.append(CutSite(label, g, "-", p, pam, pam_ok, cut,
-                                     nuclease=nuc))
+                                     nuclease=nuc, mismatches=mm))
             else:
                 # nicks a nick_prox/nick_dist del extremo PAM-proximal
                 # (el extremo 3' del protospacer en coords de la hebra +)
@@ -206,18 +226,21 @@ def locate_cut_sites(ref_seq: str, guides: Dict[str, str],
                 nick2 = p + len(g) - nick_dist
                 sites.append(CutSite(label, g, "-", p, pam, pam_ok,
                                     (nick1 + nick2) // 2, nuclease=nuc,
-                                    cut_nick_a=nick1, cut_nick_b=nick2))
-            start = p + 1
+                                    cut_nick_a=nick1, cut_nick_b=nick2,
+                                    mismatches=mm))
     if not sites:
-        raise ValueError("Ninguna de las guías se localiza en el amplicón WT "
-                         "(búsqueda exacta en ambas hebras).")
+        raise ValueError(
+            "Ninguna de las guías se localiza en el amplicón WT "
+            f"(tolerancia de discrepancias: {max_mismatch}, ambas hebras).")
     for s in sites:
         estado = f"PAM {s.pam}" if s.pam_found else \
             f"SIN PAM adyacente (leído: {s.pam or '—'})"
         extra = "" if s.nuclease == "cas9" else f" [{s.nuclease}, escalonado]"
+        mm = (f", {s.mismatches} discrepancia(s) con el WT"
+              if s.mismatches else "")
         log(f"  · {s.site_id}: hebra {s.strand}, protospacer "
             f"{s.protospacer_start + 1}-{s.protospacer_start + len(s.guide_seq)}"
-            f" (1-based), {estado}, corte {s.cut_1based}{extra}")
+            f" (1-based), {estado}, corte {s.cut_1based}{extra}{mm}")
     return sites
 
 
@@ -442,6 +465,7 @@ def run_microindel_analysis(
     min_mapq: int = 20,
     threads: int = 4,
     nuclease: str = "cas9",
+    guide_max_mismatch: int = 1,
     log=print,
 ) -> dict:
     """Ejecuta el análisis y escribe las tres tablas TSV."""
@@ -454,8 +478,10 @@ def run_microindel_analysis(
     ref_name = aligner.seq_names[0]
     ref_seq = aligner.seq(ref_name).upper()
 
-    log(f"  · localizando guías en {ref_name} ({len(ref_seq)} nt)")
-    sites = locate_cut_sites(ref_seq, guides, nuclease=nuclease, log=log)
+    log(f"  · localizando guías en {ref_name} ({len(ref_seq)} nt; "
+        f"tolerancia {guide_max_mismatch} discrepancia(s))")
+    sites = locate_cut_sites(ref_seq, guides, nuclease=nuclease,
+                             max_mismatch=guide_max_mismatch, log=log)
     by_id = {s.site_id: s for s in sites}
 
     per_read_rows = []
@@ -580,6 +606,7 @@ def run_microindel_analysis(
             "guia": s.guide_label,
             "hebra": s.strand,
             "corte_1based": s.cut_1based,
+            "discrepancias_guia_vs_WT": s.mismatches,
             "lecturas_totales": n_reads,
             "sin_alineamiento_o_no_evaluables": st["NOT_EVALUABLE"],
             "sitio_eliminado_por_deleccion_grande": st["LARGE_DEL"],
