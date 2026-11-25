@@ -19,7 +19,7 @@ WORK_DIR = Path(os.environ.get("NANODEL_WORK_DIR",
                                Path.cwd() / "uploads")).resolve()
 WORK_DIR.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="NanoDel")
+app = FastAPI(title="nanodelfy")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
