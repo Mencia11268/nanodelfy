@@ -45,13 +45,22 @@ console.error = (...a) => errores.push(String(a[1] && a[1].message || a));
 eval(fs.readFileSync(process.argv[3], 'utf8'));
 
 setTimeout(() => {
-  const cls = (elements['chart-classes'] || {})._html || '';
-  const mic = (elements['chart-micro'] || {})._html || '';
+  const g = id => (elements[id] || {})._html || '';
+  const cls = g('chart-classes');
+  const mic = g('chart-micro');
+  const dmap = g('delmap-wrap');
+  const iseq = g('indelseq-wrap');
   console.log('RESULT ' + JSON.stringify({
     errores,
     clases_svg: cls.includes('<svg'),
     clases_barras: (cls.match(/<rect/g) || []).length,
     micro_svg: mic.includes('<svg'),
+    delmap_svg: dmap.includes('<svg'),
+    delmap_filas: (dmap.match(/height="10"/g) || []).length,
+    indelseq_bloques: (iseq.match(/aln-block/g) || []).length,
+    indelseq_del: (iseq.match(/aln-d/g) || []).length,
+    indelseq_ins: (iseq.match(/aln-i/g) || []).length,
+    indelseq_corte: (iseq.match(/aln-cut/g) || []).length,
   }));
   process.exit(0);
 }, 300);
@@ -77,6 +86,34 @@ JOB = {
             "summary": [
                 {"sitio": "guia_1@2017", "con_microindel": 3,
                  "pct_microindel_sobre_evaluables": "4.00"},
+            ],
+            "alleles_display": [
+                {
+                    "sitio": "guia_1@2017",
+                    "corte_1based": "entre 2017 y 2018",
+                    "ref": "ACGTACGTACGTACGTACGT",
+                    "corte_rel": 10,
+                    "alelos": [
+                        {"alelo": "alelo_001", "n_lecturas": 5, "pct": "6.25",
+                         "eventos": "DEL3nt@ref2014",
+                         "segmentos": [
+                             {"t": "m", "seq": "ACGTACGTAC"},
+                             {"t": "d", "seq": "GTA"},
+                             {"t": "i", "seq": "TT"},
+                             {"t": "m", "seq": "CGTACGTACGT"},
+                         ]},
+                    ],
+                },
+            ],
+        },
+        "deletion_view": {
+            "ref_len": 3000,
+            "esperada": {"start": 999, "end": 2000},
+            "cortes": [{"sitio": "guia_1@1005", "pos": 1005}],
+            "deleciones": [
+                {"start": 1000, "end": 1999, "length": 999, "n": 40,
+                 "pct": 40.0, "ins_total": 0, "desde_guia": "guia_1@1005",
+                 "hasta_guia": "", "etiqueta": "guia_1@1005"},
             ],
         },
         "files": {},
@@ -106,3 +143,11 @@ def test_job_page_js_renderiza_graficos(tmp_path):
     assert result["clases_svg"], "el gráfico de clases debe pintarse"
     assert result["clases_barras"] >= 2, "deben pintarse barras (WT + CALIB)"
     assert result["micro_svg"], "el gráfico de microindels debe pintarse"
+    # mapa de deleciones recurrentes
+    assert result["delmap_svg"], "el mapa de deleciones debe pintarse"
+    assert result["delmap_filas"] == 1, "debe pintarse 1 fila de deleción"
+    # alineamiento de indels recurrentes por guía
+    assert result["indelseq_bloques"] == 1, "debe haber 1 bloque de guía"
+    assert result["indelseq_del"] >= 1, "la deleción debe ir en rojo"
+    assert result["indelseq_ins"] >= 1, "la inserción debe ir en azul"
+    assert result["indelseq_corte"] == 1, "el corte debe resaltarse"

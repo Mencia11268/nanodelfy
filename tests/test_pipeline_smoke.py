@@ -129,3 +129,31 @@ def test_pipeline_end_to_end(mini_dataset, tmp_path):
     wts = df[df["read_id"].str.startswith("wt_")]
     fp = wts["class"].isin(EDITED_CLASSES).sum()
     assert fp <= 1, f"falsos positivos WT: {fp}/{len(wts)}"
+
+    # 4. Mapa de deleciones recurrentes (para el gráfico web)
+    dv = res.get("deletion_view")
+    assert dv, "deletion_view debe estar presente con lecturas DEL"
+    assert dv["ref_len"] == WT_LEN
+    assert dv["esperada"] == {"start": DEL_START - 1, "end": DEL_END}
+    assert dv["deleciones"], "debe haber al menos una deleción recurrente"
+    top = dv["deleciones"][0]
+    assert top["n"] >= 0.7 * len(edits), \
+        f"la deleción esperada no agrupa las lecturas editadas: {top['n']}"
+    # breakpoints consolidados cerca de los esperados (±15 nt)
+    assert abs(top["start"] - (DEL_START - 1)) <= 15
+    assert abs(top["end"] - DEL_END) <= 15
+    assert dv["cortes"], "falta la lista de cortes de guía"
+    assert "test" in dv["cortes"][0]["sitio"], "falta el corte de la guía"
+
+    # 5. Alelos recurrentes por guía (para el gráfico de secuencia web)
+    ad = res["microindels"]["alleles_display"]
+    assert ad, "debe haber alelos recurrentes en la guía sintética"
+    bloque = ad[0]
+    assert 0 <= bloque["corte_rel"] < len(bloque["ref"])
+    for alelo in bloque["alelos"]:
+        assert alelo["n_lecturas"] >= 3
+        tipos = {s["t"] for s in alelo["segmentos"]}
+        assert tipos <= {"m", "d", "i"}
+        # los segmentos m+d deben cubrir la ventana de referencia
+        cubierto = sum(len(s["seq"]) for s in alelo["segmentos"] if s["t"] != "i")
+        assert cubierto == len(bloque["ref"])

@@ -627,6 +627,36 @@ def call_site(site: CutSite, aln, events: List[IndelEvent],
 
 # ---------------------------------------------------------------- análisis principal
 
+def _allele_segments(ref_seq: str, lo: int, hi: int,
+                     evs: list) -> List[dict]:
+    """Segmenta la ventana de referencia [lo, hi) según los eventos de un
+    alelo, para dibujar el alineamiento en la web.
+
+    Devuelve una lista de segmentos ordenados:
+        {"t": "m", "seq": ...}  bases compartidas con la referencia
+        {"t": "d", "seq": ...} bases de la referencia DELETIONADAS en la lectura
+        {"t": "i", "seq": ...} bases INSERTADAS (no están en la referencia)
+    """
+    segs: List[dict] = []
+    cursor = lo
+    for op, rpos, length, ins in sorted(evs, key=lambda e: e[1]):
+        if op == "D":
+            a, b = max(lo, rpos), min(hi, rpos + length)
+            if b > a:
+                if rpos > cursor:
+                    segs.append({"t": "m", "seq": ref_seq[cursor:rpos]})
+                segs.append({"t": "d", "seq": ref_seq[a:b]})
+                cursor = b
+        elif op == "I" and lo <= rpos <= hi:
+            if rpos > cursor:
+                segs.append({"t": "m", "seq": ref_seq[cursor:rpos]})
+            segs.append({"t": "i", "seq": ins or ""})
+            cursor = rpos
+    if cursor < hi:
+        segs.append({"t": "m", "seq": ref_seq[cursor:hi]})
+    return segs
+
+
 def run_microindel_analysis(
     fastq_gz: Path,
     ref_fa: Path,
@@ -805,6 +835,7 @@ def run_microindel_analysis(
             "guia": s.guide_label,
             "hebra": s.strand,
             "corte_1based": s.cut_1based,
+            "corte_pos_0based": s.cut_pos,
             "discrepancias_guia_vs_WT": s.mismatches,
             "lecturas_totales": n_reads,
             "sin_alineamiento_o_no_evaluables": st["NOT_EVALUABLE"],
@@ -830,15 +861,11 @@ def run_microindel_analysis(
         lo = max(0, s.cut_pos - 30)
         hi = min(len(ref_seq), s.cut_pos + 30)
         ref_win = ref_seq[lo:hi]
-        read_win = list(ref_win)
-        for op, rpos, length, ins in sorted(evs, key=lambda e: -e[1]):
-            rel = rpos - lo
-            if op == "D":
-                a, b = max(0, rel), min(len(read_win), rel + length)
-                if a < b:
-                    del read_win[a:b]
-            elif op == "I" and 0 <= rel <= len(read_win):
-                read_win.insert(rel, f"[{ins}]")
+        segs = _allele_segments(ref_seq, lo, hi, evs)
+        # compatibilidad con el formato anterior ("[seq]" para inserciones)
+        read_win_txt = "".join(
+            t["seq"] if t["t"] != "i" else f"[{t['seq']}]"
+            for t in (segs or [{"t": "m", "seq": ref_win}]))
         ev_total = site_stats[site_id]['NO_INDEL'] + site_stats[site_id]['MICROINDEL']
         allele_rows.append({
             "alelo": allele_ids[(site_id, key)],
@@ -851,12 +878,40 @@ def run_microindel_analysis(
             "secuencia_insercion": " | ".join(
                 ins for op, rpos, length, ins in evs if op == "I"),
             "contexto_ref_(corte±30)": ref_win,
-            "contexto_RECONSTRUIDO_desde_ref_(corte±30)": "".join(read_win),
+            "contexto_RECONSTRUIDO_desde_ref_(corte±30)": read_win_txt,
             "ids_lecturas": ",".join(allele_reads[(site_id, key)][:20]),
         })
     df_alleles = pd.DataFrame(allele_rows)
     df_alleles.to_csv(f"{out_prefix}.microindels_alleles.tsv", sep="\t",
                       index=False)
+
+    # --- Alelos recurrentes por sitio, listos para el gráfico de secuencia
+    # de la web (top 8 con soporte >= 3 lecturas; incluye segmentos para
+    # dibujar el alineamiento contra la referencia).
+    alleles_display: List[dict] = []
+    for site_id in [s.site_id for s in sites]:
+        site_rows = [r for r in allele_rows if r["sitio"] == site_id]
+        site_rows.sort(key=lambda r: -r["n_lecturas"])
+        top = [r for r in site_rows if r["n_lecturas"] >= 3][:8]
+        if not top:
+            continue
+        s = by_id[site_id]
+        lo = max(0, s.cut_pos - 30)
+        hi = min(len(ref_seq), s.cut_pos + 30)
+        alleles_display.append({
+            "sitio": site_id,
+            "corte_1based": s.cut_1based,
+            "ref": ref_seq[lo:hi],
+            "corte_rel": s.cut_pos - lo,     # posición del corte en la ventana
+            "alelos": [
+                {"alelo": r["alelo"].split("|")[-1], "n_lecturas": r["n_lecturas"],
+                 "pct": r["pct_sobre_evaluables"], "eventos": r["eventos"],
+                 "segmentos": _allele_segments(
+                     ref_seq, lo, hi,
+                     [k for (sid, k), aid in allele_ids.items()
+                      if sid == site_id and aid == r["alelo"]][0])}
+                for r in top],
+        })
 
     # Reetiquetar la columna "alelo" con ids cortos
     if not df_read.empty:
@@ -940,6 +995,7 @@ def run_microindel_analysis(
         "n_reads": n_reads,
         "n_sites": len(sites),
         "sites": [s.site_id for s in sites],
+        "alleles_display": alleles_display,
         "guias_no_localizadas": no_localizadas,
         "summary": df_sum.to_dict("records"),
         "haplotipos": {

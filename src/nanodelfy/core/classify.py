@@ -1052,6 +1052,44 @@ def run_classification(wt_records, edit_records, params: Params,
             ),
         })
 
+    # ---- Deleciones recurrentes (para el mapa de lecturas de la web) -------
+    # Agrupa las lecturas DEL por breakpoints observados (0-based,
+    # semiabiertos). El ruido Nanopore dispersa los breakpoints ±pocos nt:
+    # se consolidan en un mismo evento las deleciones cuyos dos extremos
+    # quedan a <= _TOPDEL_TOL nt de un evento ya contado (media ponderada).
+    _TOPDEL_TOL = 10
+    del_events: list = []          # [{start, end, n, ins_total}]
+    for r in rows:
+        if not str(r["class"]).startswith("DEL"):
+            continue
+        try:
+            s_, e_ = int(r["obs_start"]), int(r["obs_end"])
+        except (TypeError, ValueError):
+            continue
+        if e_ <= s_:
+            continue
+        try:
+            ins_ = max(0, int(r["ins_total"] or 0))
+        except (TypeError, ValueError):
+            ins_ = 0
+        for ev in del_events:
+            if (abs(ev["start"] - s_) <= _TOPDEL_TOL
+                    and abs(ev["end"] - e_) <= _TOPDEL_TOL):
+                w = ev["n"]
+                ev["start"] = round((ev["start"] * w + s_) / (w + 1))
+                ev["end"] = round((ev["end"] * w + e_) / (w + 1))
+                ev["n"] += 1
+                ev["ins_total"] += ins_
+                break
+        else:
+            del_events.append(
+                {"start": s_, "end": e_, "n": 1, "ins_total": ins_})
+    del_events.sort(key=lambda ev: -ev["n"])
+    top_deletions = [
+        {**ev, "length": ev["end"] - ev["start"]}
+        for ev in del_events[:12]
+    ]
+
     df = pd.DataFrame(rows)
 
     # ---- Capa estadística opcional: calibración del ruido con las lecturas
@@ -1157,4 +1195,5 @@ def run_classification(wt_records, edit_records, params: Params,
         "total_reads": total,
         "counts": dict(counts),
         "summary": summary.to_dict(orient="records"),
+        "top_deletions": top_deletions,
     }

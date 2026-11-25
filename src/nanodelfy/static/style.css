@@ -232,3 +232,41 @@ footer {
   font-size: 12px;
   margin-top: 32px;
 }
+
+/* --- Alineamientos de indels recurrentes por guía --- */
+.aln-block { margin-bottom: 18px; }
+.aln-block h3 {
+  margin: 0 0 6px 0;
+  font-size: 14px;
+  color: var(--accent-dark, #1e40af);
+}
+.aln-row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  margin: 2px 0;
+  font-size: 12px;
+}
+.aln-label {
+  flex: 0 0 200px;
+  text-align: right;
+  color: var(--muted, #6b7280);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.aln {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.5px;
+  word-break: break-all;
+  white-space: normal;
+  line-height: 1.5;
+}
+.aln-d { color: #dc2626; text-decoration: line-through; }
+.aln-i { color: #2563eb; font-weight: 600; }
+.aln-cut { background: #fde68a; border-radius: 2px; }
+
+@media (max-width: 640px) {
+  .aln-label { flex: 0 0 110px; font-size: 10px; }
+  .aln { font-size: 11px; }
+}

@@ -178,11 +178,51 @@ def run_full_pipeline(
             "frt_sin_delecion": str(out_dir / f"{sample_name}.frt_sin_delecion_resumen.tsv"),
             "frt_local_por_lectura": str(out_dir / f"{sample_name}.frt_sin_delecion_lecturas.tsv"),
         })
+    # --- Mapa de deleciones recurrentes (para el gráfico de lecturas web):
+    # coordenadas 0-based semiabiertas, cortes de guía y deleción esperada.
+    deletion_view = None
+    if cls_stats and cls_stats.get("top_deletions"):
+        cortes = []
+        if micro_stats:
+            for r in micro_stats.get("summary", []):
+                cp = r.get("corte_pos_0based")
+                if isinstance(cp, int):
+                    cortes.append({"sitio": r["sitio"], "pos": cp})
+
+        def _guia_cercana(pos: int):
+            mejor, d = None, 60          # ±60 nt alrededor del corte
+            for c in cortes:
+                dd = abs(c["pos"] - pos)
+                if dd <= d:
+                    mejor, d = c["sitio"], dd
+            return mejor
+
+        total_reads = cls_stats.get("total_reads") or 1
+        deleciones = []
+        for d in cls_stats["top_deletions"]:
+            g5, g3 = _guia_cercana(d["start"]), _guia_cercana(d["end"])
+            deleciones.append({
+                **d,
+                "pct": round(100.0 * d["n"] / total_reads, 2),
+                "desde_guia": g5 or "",
+                "hasta_guia": g3 or "",
+                "etiqueta": " → ".join(x for x in (g5, g3) if x) or
+                            f"del {d['start'] + 1}-{d['end']}",
+            })
+        deletion_view = {
+            "ref_len": ref_stats["wt_length"] if ref_stats else None,
+            "esperada": {"start": params["deletion_start"] - 1,
+                        "end": params["deletion_end"]},
+            "cortes": cortes,
+            "deleciones": deleciones,
+        }
+
     return {
         "ref_stats": ref_stats,
         "filt_stats": filt_stats,
         "classification": cls_stats,
         "microindels": micro_stats,
         "frt": frt_stats,
+        "deletion_view": deletion_view,
         "files": files,
     }
