@@ -650,10 +650,22 @@ def run_microindel_analysis(
         f"{sum(1 for r in per_read_rows if r['categoria'] == 'MICROINDEL')} "
         f"llamadas con microindel")
 
+    # Guías solicitadas que NO se localizaron en el amplicón WT: se avisa de
+    # forma explícita (antes se omitían en silencio y solo quedaba un aviso
+    # enterrado en el registro).
+    encontradas = {s.guide_label for s in sites}
+    no_localizadas = [lbl for lbl in guides if lbl not in encontradas]
+    for lbl in no_localizadas:
+        log(f"  [AVISO] La guía '{lbl}' NO se localiza en el amplicón WT: "
+            f"se omite en el análisis de microindels. Revisa que la secuencia "
+            f"corresponde al alelo salvaje (no al editado) y que no atraviesa "
+            f"la unión de la deleción.")
+
     return {
         "n_reads": n_reads,
         "n_sites": len(sites),
         "sites": [s.site_id for s in sites],
+        "guias_no_localizadas": no_localizadas,
         "summary": df_sum.to_dict("records"),
         "files": {
             "per_read": f"{out_prefix}.microindels_per_read.tsv",

@@ -52,8 +52,15 @@
       </div>
     </div>
 
+    <div class="card">
+      <h2>Gráfico: distribución de clases</h2>
+      <div id="chart-classes"></div>
+    </div>
+
     <div class="card" id="micro-section" style="display:none">
       <h2>Microindels en cortes de guía</h2>
+      <div id="micro-missing" class="error-box" style="display:none; margin-bottom: 14px;"></div>
+      <div id="chart-micro"></div>
       <table class="results" id="micro-table">
         <thead>
           <tr><th>Sitio</th><th>Corte (1-based)</th><th class="num">Evaluables</th>
@@ -139,6 +146,64 @@
   // Las descripciones vienen ya del backend (campo 'description')
   const AGGREGATE = new Set(['DEL_ANY', 'EDITED_ANY', 'TOTAL']);
 
+  // ---------- Gráficos de barras SVG (sin dependencias externas) ----------
+  function barChart(containerId, rows, color) {
+    // rows: [{label, value, pct}] — pct en [0, 100]
+    const el = document.getElementById(containerId);
+    if (!rows || !rows.length) { el.innerHTML = ''; return; }
+    const maxPct = Math.max(...rows.map(r => r.pct), 1);
+    const W = 760, rowH = 28, padL = 230, padR = 140, top = 6;
+    const H = rows.length * rowH + top + 4;
+    const scale = (W - padL - padR) / 100;  // barras a escala 0-100 %
+    let svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;font-family:inherit" xmlns="http://www.w3.org/2000/svg" role="img">`;
+    rows.forEach((r, i) => {
+      const y = top + i * rowH;
+      const barW = Math.max(2, r.pct * scale);
+      svg += `<text x="${padL - 10}" y="${y + 14}" text-anchor="end" font-size="12" fill="#374151">${r.label}</text>`;
+      svg += `<rect x="${padL}" y="${y}" width="${barW}" height="19" rx="3" fill="${r.color || color}"></rect>`;
+      svg += `<text x="${padL + barW + 6}" y="${y + 14}" font-size="12" fill="#111827">${r.pct.toFixed(2)}% (${r.value})</text>`;
+    });
+    svg += '</svg>';
+    el.innerHTML = svg;
+  }
+
+  const CLS_COLORS = {
+    WT: '#10b981', DEL_EXACT: '#ef4444', DEL_ANY: '#ef4444',
+    EDITED_ANY: '#2563eb', INV: '#8b5cf6', TOTAL: '#6b7280',
+  };
+
+  function renderClassChart(summary) {
+    const rows = (summary || [])
+      .filter(r => !AGGREGATE.has(r['class']) && r['class'] !== 'TOTAL')
+      .map(r => ({
+        label: r['class'],
+        value: r.reads,
+        pct: r.frequency_pct ?? 0,
+        color: CLS_COLORS[r['class']] || '#f59e0b',
+      }));
+    barChart('chart-classes', rows, '#3b82f6');
+  }
+
+  function renderMicroChart(micro) {
+    const rows = (micro.summary || []).map(r => ({
+      label: r.sitio,
+      value: r.con_microindel,
+      pct: parseFloat(r.pct_microindel_sobre_evaluables) || 0,
+      color: '#f59e0b',
+    }));
+    barChart('chart-micro', rows, '#f59e0b');
+    const missing = micro.guias_no_localizadas;
+    const box = document.getElementById('micro-missing');
+    if (missing && missing.length) {
+      box.style.display = '';
+      box.innerHTML = '<b>Atención:</b> estas guías NO se localizan en el ' +
+        'amplicón WT (no se muestran en la tabla): <b>' +
+        missing.join('</b>, <b>') + '</b>. Comprueba que la secuencia ' +
+        'corresponde al alelo salvaje (no al editado) y que no atraviesa la ' +
+        'unión de la deleción.';
+    }
+  }
+
   function renderSummary(summary) {
     const tb = document.querySelector('#summary-table tbody');
     tb.innerHTML = '';
@@ -173,6 +238,7 @@
 
     try {
       renderSummary(job.result.classification.summary);
+      renderClassChart(job.result.classification.summary);
     } catch (e) {
       console.error('renderSummary', e);
     }
@@ -195,6 +261,7 @@
       document.getElementById('dl-micro-summary').href = `/api/download/${jobId}/micro_summary`;
       document.getElementById('dl-micro-read').href    = `/api/download/${jobId}/micro_per_read`;
       document.getElementById('dl-micro-alleles').href = `/api/download/${jobId}/micro_alleles`;
+      renderMicroChart(job.result.microindels);
       } catch (e) {
         console.error('microindels', e);
       }
