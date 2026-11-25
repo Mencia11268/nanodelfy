@@ -76,6 +76,18 @@
       </div>
     </div>
 
+    <div class="card" id="fondos-section" style="display:none">
+      <h2>Fondos alélicos detectados (SNPs)</h2>
+      <div id="fondos-table-wrap"></div>
+      <div class="info-box" style="margin-top: 16px;">
+        Los fondos alélicos se infieren de los SNPs compartidos por grupos de
+        lecturas (frecuencia mínima <span id="fondo-freq"></span>, profundidad
+        mínima <span id="fondo-depth"></span>): permiten atribuir cada
+        microindel al alelo de origen cuando el paciente es heterocigoto en el
+        amplicón. «fondo_ruido» agrupa lecturas sin fondo claro.
+      </div>
+    </div>
+
     <div class="card" id="hap-section" style="display:none">
       <h2>Haplotipos: combinaciones por lectura</h2>
       <div id="hap-table-wrap"></div>
@@ -132,6 +144,10 @@
         <a href="" id="dl-hap">
           <div class="title">📄 Microindels: haplotipos (TSV)</div>
           <div class="desc">Combinaciones por lectura (cis/trans)</div>
+        </a>
+        <a href="" id="dl-fondos">
+          <div class="title">📄 Fondos alélicos (TSV)</div>
+          <div class="desc">SNPs y lecturas por fondo</div>
         </a>
       </div>
       <div class="info-box" style="margin-top: 16px;">
@@ -282,10 +298,13 @@
         document.getElementById('hap-section').style.display = '';
         document.getElementById('dl-hap').href = `/api/download/${jobId}/micro_haplotipos`;
         const keys = Object.keys(hap.rows[0]);
+        const hasFondo = keys.includes('fondo_alélico');
         const siteCols = keys.filter(k => k !== 'haplotipo' && k !== 'n_lecturas'
-                                           && k !== 'pct_sobre_faseables');
+                                           && k !== 'pct_sobre_faseables'
+                                           && k !== 'fondo_alélico');
         let html = '<table class="results"><thead><tr>'
           + '<th>Haplotipo</th>'
+          + (hasFondo ? '<th>Fondo alélico</th>' : '')
           + siteCols.map(c => `<th>${c}</th>`).join('')
           + '<th class="num">Lecturas</th>'
           + '<th class="num">% faseables</th></tr></thead><tbody>';
@@ -293,6 +312,7 @@
           const hasIndel = siteCols.some(c => r[c] && r[c] !== 'sin_indel');
           html += `<tr${hasIndel ? ' style="background:#fff7ed;"' : ''}>`
             + `<td>${r.haplotipo}</td>`
+            + (hasFondo ? `<td>${r['fondo_alélico'] ?? ''}</td>` : '')
             + siteCols.map(c => `<td>${r[c] ?? ''}</td>`).join('')
             + `<td class="num">${r.n_lecturas}</td>`
             + `<td class="num">${r.pct_sobre_faseables}</td></tr>`;
@@ -300,6 +320,26 @@
         html += `</tbody></table><div class="info-box" style="margin-top:10px;">`
           + `Lecturas faseables (evaluables en todos los sitios): ${hap.n_faseables}</div>`;
         document.getElementById('hap-table-wrap').innerHTML = html;
+      }
+      const fon = job.result.microindels['fondos_alélicos'];
+      if (fon && fon.clusters && fon.clusters.length) {
+        document.getElementById('fondos-section').style.display = '';
+        const df = document.getElementById('dl-fondos');
+        if (df) df.href = `/api/download/${jobId}/micro_fondos`;
+        let html = '<table class="results"><thead><tr>'
+          + '<th>Fondo</th><th class="num">Lecturas</th><th class="num">%</th>'
+          + '<th class="num">SNPs del fondo</th><th>SNPs (posición, ref>alt)</th>'
+          + '</tr></thead><tbody>';
+        fon.clusters.forEach(r => {
+          html += `<tr><td>${r.fondo}</td><td class="num">${r.n_lecturas}</td>`
+            + `<td class="num">${r.pct}</td><td class="num">${r.n_snps_fondo ?? ''}</td>`
+            + `<td style="font-family:monospace;font-size:12px;">${r.snps ?? ''}</td></tr>`;
+        });
+        html += '</tbody></table>';
+        document.getElementById('fondos-table-wrap').innerHTML = html;
+        const p = job.params || {};
+        document.getElementById('fondo-freq').textContent = p.snp_min_alt_freq ?? '0.2';
+        document.getElementById('fondo-depth').textContent = p.snp_min_depth ?? 10;
       }
       renderMicroChart(job.result.microindels);
       } catch (e) {

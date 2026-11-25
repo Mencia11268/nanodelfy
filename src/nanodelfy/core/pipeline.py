@@ -107,6 +107,8 @@ def run_full_pipeline(
                 min_mapq=params.get("min_mapq", 20),
                 nuclease=params.get("nuclease", "cas9"),
                 guide_max_mismatch=params.get("guide_max_mismatch", 1),
+                snp_min_alt_freq=params.get("snp_min_alt_freq", 0.20),
+                snp_min_depth=params.get("snp_min_depth", 10),
                 log=log,
             )
         else:
@@ -166,6 +168,8 @@ def run_full_pipeline(
             "micro_alleles":  micro_stats["files"]["alleles"],
             **({"micro_haplotipos": micro_stats["files"]["haplotipos"]}
                if micro_stats["files"].get("haplotipos") else {}),
+            **({"micro_fondos": micro_stats["files"]["fondos"]}
+               if micro_stats["files"].get("fondos") else {}),
         })
     if frt_stats:
         files.update({

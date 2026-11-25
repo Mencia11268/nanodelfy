@@ -261,6 +261,179 @@ class IndelEvent:
         return f"I{self.length}@antes_de_{self.ref_start + 1}({self.ins_seq})"
 
 
+def _parse_cs_substitutions(aln):
+    """Sustituciones y deleciones del tag cs, en coords de ref (0-based).
+
+    Devuelve (subs, del_ranges, r_st, r_en):
+      - subs: {pos_ref: base_lectura} (base en orientación de la referencia)
+      - del_ranges: lista de (inicio, fin) de deleciones en la referencia
+    Requiere aligner.map(..., cs=True).
+    """
+    import re as _re
+    subs: Dict[int, str] = {}
+    dels: List[tuple] = []
+    r = aln.r_st
+    if not aln.cs:
+        return subs, dels, aln.r_st, aln.r_en
+    for m in _re.finditer(
+            r":(\d+)|\*([acgtnACGTN])([acgtnACGTN])|\+([acgtnACGTN]+)|-([acgtnACGTN]+)",
+            aln.cs):
+        if m.group(1) is not None:
+            r += int(m.group(1))
+        elif m.group(2) is not None:
+            subs[r] = m.group(3).upper()
+            r += 1
+        elif m.group(4) is not None:
+            pass                      # inserción: no avanza la referencia
+        elif m.group(5) is not None:
+            dels.append((r, r + len(m.group(5))))
+            r += len(m.group(5))
+    return subs, dels, aln.r_st, aln.r_en
+
+
+def cluster_allelic_backgrounds(reads_info, ref_seq: str,
+                                min_alt_freq: float = 0.20,
+                                min_depth: int = 10,
+                                min_cluster_pct: float = 1.0,
+                                log=print):
+    """Agrupa las lecturas por fondo alélico a partir de SNPs compartidos.
+
+    `reads_info`: dict read_id → (subs, del_ranges, r_st, r_en) tal como lo
+    devuelve _parse_cs_substitutions.
+
+    Proceso:
+      1. Pila de sustituciones: posiciones donde una base alterna distinta
+         de la de referencia alcanza frecuencia ≥ min_alt_freq con
+         profundidad ≥ min_depth → SNPs candidatos.
+      2. Vector por lectura: base de la lectura en cada SNP candidato
+         (None si la lectura no cubre la posición o la tiene delecionada).
+      3. Clustering voraz por similitud de vectores (≤ 25% de discrepancias
+         sobre las posiciones compartidas): los errores de secuenciación
+         aleatorios no fragmentan los fondos.
+
+    Devuelve None si no hay SNPs candidatos (no se puede separar fondos),
+    o un dict con:
+      - snps: lista de dicts {pos, ref, alt, freq}
+      - fondo_by_read: {read_id: etiqueta}
+      - clusters: [{fondo, n_lecturas, pct, snps}] ordenados por tamaño
+    """
+    # ------- 1) pila de sustituciones
+    alt_counts: Dict[int, Dict[str, int]] = {}
+    for rid, (subs, dels, r_st, r_en) in reads_info.items():
+        for pos, base in subs.items():
+            if base != ref_seq[pos]:
+                alt_counts.setdefault(pos, {}).setdefault(base, 0)
+                alt_counts[pos][base] += 1
+    if not alt_counts:
+        return None
+
+    def _depth(pos):
+        d = 0
+        for rid, (subs, dels, r_st, r_en) in reads_info.items():
+            if r_st <= pos < r_en and not any(a <= pos < b for a, b in dels):
+                d += 1
+        return d
+
+    candidatos = []
+    for pos, counts in sorted(alt_counts.items()):
+        if not (0 <= pos < len(ref_seq)):
+            continue
+        alt_base, alt_n = max(counts.items(), key=lambda kv: kv[1])
+        if alt_n < 2:
+            continue
+        depth = _depth(pos)
+        if depth < min_depth or alt_n / depth < min_alt_freq:
+            continue
+        candidatos.append({
+            "pos": pos, "ref": ref_seq[pos], "alt": alt_base,
+            "freq": round(alt_n / depth, 3), "n": alt_n, "depth": depth,
+        })
+    if not candidatos:
+        return None
+    posiciones = [c["pos"] for c in candidatos]
+
+    # ------- 2) vector por lectura
+    def _vector(rid):
+        subs, dels, r_st, r_en = reads_info[rid]
+        v = []
+        for pos in posiciones:
+            if pos in subs:
+                v.append(subs[pos])
+            elif not (r_st <= pos < r_en) or any(
+                    a <= pos < b for a, b in dels):
+                v.append(None)
+            else:
+                v.append(ref_seq[pos])
+        return tuple(v)
+
+    vectores = {}
+    for rid in reads_info:
+        vectores.setdefault(_vector(rid), []).append(rid)
+
+    n_reads = len(reads_info)
+    min_shared = max(2, int(0.4 * len(posiciones)))
+    min_cluster = max(3, int(min_cluster_pct / 100 * n_reads))
+
+    # ------- 3) clustering voraz por similitud de vectores
+    clusters = []   # [(semilla_vector, [read_ids])]
+    for v, rids in sorted(vectores.items(), key=lambda kv: -len(kv[1])):
+        mejor = None
+        for semilla, members in clusters:
+            shared = [i for i in range(len(posiciones))
+                      if v[i] is not None and semilla[i] is not None]
+            if len(shared) < min_shared:
+                continue
+            mm = sum(1 for i in shared if v[i] != semilla[i])
+            if mm / len(shared) <= 0.25 and (mejor is None or mm < mejor[1]):
+                mejor = (semilla, mm)
+        if mejor is None:
+            clusters.append((v, list(rids)))
+        else:
+            mejor_idx = [i for i, c in enumerate(clusters)
+                         if c[0] == mejor[0]][0]
+            clusters[mejor_idx][1].extend(rids)
+
+    # ------- 4) etiquetado; clusters diminutos → ruido
+    clusters.sort(key=lambda c: -len(c[1]))
+    fondo_by_read: Dict[str, str] = {}
+    cluster_rows = []
+    n_ruido = 0
+    for i, (v, rids) in enumerate(clusters):
+        if len(rids) < min_cluster:
+            n_ruido += len(rids)
+            for rid in rids:
+                fondo_by_read[rid] = "fondo_ruido"
+            continue
+        etiqueta = f"fondo_{i + 1:02d}"
+        snps = ", ".join(
+            f"{c['pos'] + 1}{c['ref']}>{v[k]}"
+            for k, c in enumerate(candidatos) if v[k] not in (None, c["ref"]))
+        cluster_rows.append({
+            "fondo": etiqueta,
+            "n_lecturas": len(rids),
+            "pct": round(100 * len(rids) / n_reads, 2),
+            "n_snps_fondo": sum(1 for k, c in enumerate(candidatos)
+                                if v[k] not in (None, c["ref"])),
+            "snps": snps,
+        })
+        for rid in rids:
+            fondo_by_read[rid] = etiqueta
+    if n_ruido:
+        cluster_rows.append({
+            "fondo": "fondo_ruido", "n_lecturas": n_ruido,
+            "pct": round(100 * n_ruido / n_reads, 2),
+            "n_snps_fondo": "", "snps": "lecturas sin fondo claro",
+        })
+    log(f"  · fondos alélicos: {len(candidatos)} SNP(s) candidato(s), "
+        f"{len(cluster_rows)} fondo(s) (umbral freq ≥ {min_alt_freq}, "
+        f"profundidad ≥ {min_depth})")
+    return {
+        "snps": candidatos,
+        "clusters": cluster_rows,
+        "fondo_by_read": fondo_by_read,
+    }
+
+
 def _oriented_fragment(aln, seq: str, qual: Optional[str]):
     """
     Fragmento de lectura en la orientación del alineamiento:
@@ -466,6 +639,8 @@ def run_microindel_analysis(
     threads: int = 4,
     nuclease: str = "cas9",
     guide_max_mismatch: int = 1,
+    snp_min_alt_freq: float = 0.20,
+    snp_min_depth: int = 10,
     log=print,
 ) -> dict:
     """Ejecuta el análisis y escribe las tres tablas TSV."""
@@ -489,10 +664,11 @@ def run_microindel_analysis(
     allele_reads: Dict[tuple, List[str]] = defaultdict(list)
     site_stats = {s.site_id: Counter() for s in sites}
     n_reads = 0
+    reads_snp_info: Dict[str, tuple] = {}   # para fondos alélicos (cs tag)
 
     for name, seq, qual in mp.fastx_read(str(fastq_gz), read_comment=False):
         n_reads += 1
-        hits = list(aligner.map(seq, cs=False, MD=False))
+        hits = list(aligner.map(seq, cs=True, MD=False))
         if not hits:
             for s in sites:
                 per_read_rows.append({
@@ -503,6 +679,10 @@ def run_microindel_analysis(
                 })
                 site_stats[s.site_id]["NOT_EVALUABLE"] += 1
             continue
+
+        # Fondo alélico: sustituciones del mejor alineamiento de la lectura
+        best = max(hits, key=lambda h: h.mlen)
+        reads_snp_info[name] = _parse_cs_substitutions(best)
 
         # Para cada sitio: el mejor alineamiento que ATRAVIESE la ventana;
         # si ninguno la atraviesa, el más largo (para justificar NOT_EVALUABLE).
@@ -592,7 +772,26 @@ def run_microindel_analysis(
                     "alelo": "", "max_indel_nt": 0, "calidad_media_eventos": "",
                 })
 
+    # --- Fondos alélicos por SNPs compartidos (fase de los microindels
+    # --- sobre el alelo de origen cuando el paciente es heterocigoto).
+    fondos = None
+    if reads_snp_info:
+        fondos = cluster_allelic_backgrounds(
+            reads_snp_info, ref_seq,
+            min_alt_freq=snp_min_alt_freq, min_depth=snp_min_depth,
+            log=log)
+
     df_read = pd.DataFrame(per_read_rows)
+    if not df_read.empty:
+        if fondos:
+            df_read["fondo_alélico"] = (
+                df_read["read_id"].map(fondos["fondo_by_read"])
+                .fillna("sin_alineamiento"))
+        else:
+            df_read["fondo_alélico"] = "sin_SNPs"
+    if fondos:
+        pd.DataFrame(fondos["clusters"]).to_csv(
+            f"{out_prefix}.fondos_alélicos.tsv", sep="\t", index=False)
     df_read.to_csv(f"{out_prefix}.microindels_per_read.tsv", sep="\t",
                    index=False)
 
@@ -685,18 +884,24 @@ def run_microindel_analysis(
                 per_read: Dict[str, list] = {}
                 for _, r in df_hap[df_hap["read_id"].isin(full_reads)] \
                         .iterrows():
+                    fondo = (r.get("fondo_alélico")
+                             if isinstance(r.get("fondo_alélico"), str)
+                             else None) or "s/fondo"
                     per_read.setdefault(r["read_id"], []).append(
-                        (r["sitio"], r["categoria"], r["alelo"]))
+                        (fondo, r["sitio"], r["categoria"], r["alelo"]))
                 combo_counts = Counter(
-                    tuple(sorted(v)) for v in per_read.values())
+                    (v[0][0], tuple(sorted(x[1:] for x in v)))
+                    for v in per_read.values())
                 for i, (combo, n) in enumerate(combo_counts.most_common(), 1):
+                    fondo, llamadas = combo
                     row = {
                         "haplotipo": f"hap_{i:03d}",
+                        "fondo_alélico": fondo,
                         "n_lecturas": n,
                         "pct_sobre_faseables": round(
                             100 * n / n_hap_reads, 2),
                     }
-                    for sitio, cat, alelo in combo:
+                    for sitio, cat, alelo in llamadas:
                         row[sitio] = (
                             alelo if cat == "MICROINDEL" and alelo
                             else "sin_indel" if cat == "NO_INDEL"
@@ -741,11 +946,17 @@ def run_microindel_analysis(
             "n_faseables": n_hap_reads,
             "rows": hap_rows,
         },
+        "fondos_alélicos": (
+            {"n_snps": len(fondos["snps"]), "snps": fondos["snps"],
+             "clusters": fondos["clusters"]}
+            if fondos else None
+        ),
         "files": {
             "per_read": f"{out_prefix}.microindels_per_read.tsv",
             "summary": f"{out_prefix}.microindels_summary.tsv",
             "alleles": f"{out_prefix}.microindels_alleles.tsv",
             **({"haplotipos": hap_file} if hap_file else {}),
+            **({"fondos": f"{out_prefix}.fondos_alélicos.tsv"} if fondos else {}),
         },
     }
 

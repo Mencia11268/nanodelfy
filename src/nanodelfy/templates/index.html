@@ -140,6 +140,20 @@
           Útil para guías específicas de un alelo que difiera en alguna base del
           salvaje (0 = coincidencia exacta).</div>
       </div>
+      <div class="row">
+        <div class="field">
+          <label>Frecuencia mín. SNP (fondo alélico)</label>
+          <input type="number" name="snp_min_alt_freq" value="0.20" min="0.05" max="0.5" step="0.01">
+          <div class="hint">Frecuencia mínima de una base alterna para contar como
+            SNP y separar fondos alélicos del paciente (heterocigosidad ~0,5).</div>
+        </div>
+        <div class="field">
+          <label>Profundidad mín. SNP</label>
+          <input type="number" name="snp_min_depth" value="10" min="1">
+          <div class="hint">Lecturas mínimas que deben cubrir una posición para
+            evaluarla como SNP.</div>
+        </div>
+      </div>
       <div class="field">
         <label>Calibración estadística del ruido</label>
         <select name="calibration">
