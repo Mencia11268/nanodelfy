@@ -4,11 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>nanodelfy · {{ job.sample_name }}</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="128x128" href="/static/favicon-128.png">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 <div class="container">
   <header>
+    <img src="/static/logo.png" alt="nanodelfy" class="logo logo-job">
     <h1>{{ job.sample_name }}
       <span id="status-pill" class="status-pill status-running">en marcha</span>
     </h1>

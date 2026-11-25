@@ -270,3 +270,13 @@ footer {
   .aln-label { flex: 0 0 110px; font-size: 10px; }
   .aln { font-size: 11px; }
 }
+
+/* --- Logotipo --- */
+.logo {
+  display: block;
+  width: 260px;
+  max-width: 65vw;
+  height: auto;
+}
+.logo-job { width: 170px; margin-bottom: 10px; }
+header h1 { overflow: visible; }
