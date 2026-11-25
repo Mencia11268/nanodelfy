@@ -165,10 +165,11 @@ def align_minimap2(fastq_gz: Path, ref_fa: Path, out_bam: Path,
     """
     log(f"  · alineando contra {ref_fa.name}")
 
+    # bw por defecto de minimap2: fijar bw/bw_long a 2000 rompía el encadenado
+    # a través de deleciones grandes (la lectura quedaba parcial: 1438M + clip)
     aligner = mp.Aligner(
         str(ref_fa), preset="map-ont",
         n_threads=threads, best_n=5,
-        bw=2000, bw_long=2000,
     )
     if not aligner:
         raise RuntimeError(f"No se pudo construir el índice de {ref_fa}")

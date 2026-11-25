@@ -243,6 +243,11 @@ def run_full_pipeline(
 
         deleciones = []
         for d in cls_stats["top_deletions"]:
+            # sin unión observada (deleción no completa en el alineamiento,
+            # p. ej. lecturas parciales) no se puede dibujar la variante:
+            # fuera del gráfico (siguen contando en la clasificación)
+            if not d.get("pattern"):
+                continue
             item = {**d, **_flancos(d)}      # puede ajustar start/end/length
             g5, g3 = _guia_cercana(item["start"]), _guia_cercana(item["end"])
             item["pct"] = round(100.0 * d["n"] / total_reads, 2)

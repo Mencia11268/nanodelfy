@@ -152,7 +152,7 @@ def test_pipeline_end_to_end(mini_dataset, tmp_path):
         assert tipos <= {"m", "d", "i"}, f"tipos raros en {lado}: {tipos}"
         cubierto = sum(len(s["seq"]) for s in segs if s["t"] != "i")
         assert cubierto == 30, f"{lado} no cubre 30 nt: {cubierto}"
-    assert top["flanco5"][0]["t"] == "m"      # sin patrón: reconstrucción plana
+    assert top["flanco5"][0]["t"] == "m"      # el flanco empieza con bases comunes
     assert top["ins_union"] in ("",) or isinstance(top["ins_union"], str)
     assert "pattern" not in top                # interno: no debe ir al JSON
 
