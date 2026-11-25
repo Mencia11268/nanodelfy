@@ -28,8 +28,8 @@ keywords:
 repository-code: "https://github.com/Mencia11268/nanodelfy"
 identifiers:
   - type: doi
-    value: 10.5281/zenodo.24498244
-    description: "DOI de la versión 1.1.2 (Zenodo)"
+    value: 10.5281/zenodo.24534251
+    description: "DOI de la versión 1.1.3 (Zenodo)"
   - type: doi
     value: 10.5281/zenodo.24498243
     description: "DOI de concepto (todas las versiones)"
