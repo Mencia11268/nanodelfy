@@ -241,6 +241,92 @@ def collect_evidence_from_records(wt_records: List[AlnRecord],
 
 # ---------- reglas de clasificación ----------------------------------------
 
+def _junction_pattern(aln, d_start: int, d_end: int, wt_seq: str,
+                      flank: int = 30, tol: int = 10):
+    """Patrón OBSERVADO de la unión de una deleción grande (para la web).
+
+    Recorre el CIGAR del alineamiento primario contra WT, localiza la D
+    principal que coincide con [d_start, d_end) (±tol) y expande el
+    "cluster de la unión": las D adyacentes y las M cortas con
+    discrepancias frente a la referencia (así es como el alineador
+    representa las inserciones de NHEJ pegadas a la unión: la inserción
+    ancla dentro de la deleción, dejando la D principal más corta).
+
+    Devuelve None si el alineamiento no contiene la deleción completa, o
+    una tupla:
+        (c_start, c_end, ins_union, flanks)
+    - c_start/c_end: intervalo de referencia del cluster (la barra).
+    - ins_union: bases de lectura insertadas en la unión (azul).
+    - flanks: eventos D/I de los flancos (>= 3 nt, ruido filtrado), como
+      (op, rel_redondeado_a_5, length) con rel relativo a c_start.
+    """
+    if aln is None or not aln.cigartuples or not aln.query_sequence:
+        return None
+    q = aln.query_sequence
+    ops = []                     # (op, rpos, length, qseq)
+    ref, qpos = aln.reference_start, 0
+    for op, length in aln.cigartuples:
+        if op in (0, 7, 8):
+            ops.append(("M", ref, length, q[qpos:qpos + length]))
+            ref += length
+            qpos += length
+        elif op == 1:
+            ops.append(("I", ref, length, q[qpos:qpos + length]))
+            qpos += length
+        elif op == 2:
+            ops.append(("D", ref, length, ""))
+            ref += length
+        elif op == 3:
+            ops.append(("N", ref, length, ""))
+            ref += length
+        elif op == 4:
+            qpos += length
+
+    main_i = None
+    for i, (op, rpos, length, _qs) in enumerate(ops):
+        if (op == "D" and abs(rpos - d_start) <= tol
+                and abs(rpos + length - d_end) <= tol):
+            main_i = i
+            break
+    if main_i is None:
+        return None
+
+    def _m_de_insercion(i: int) -> bool:
+        """M corta con discrepancias vs referencia: inserción de unión."""
+        op, rpos, length, qs = ops[i]
+        rs = wt_seq[rpos:rpos + length] if wt_seq else ""
+        return bool(qs) and length <= 30 and rs and qs != rs
+
+    # expandir el cluster hacia ambos lados (limitado a ±60 nt de la unión)
+    lo = main_i
+    while lo - 1 >= 0 and ops[lo - 1][1] >= d_start - 60 and (
+            ops[lo - 1][0] in ("D", "I", "N") or _m_de_insercion(lo - 1)):
+        lo -= 1
+    hi = main_i
+    while hi + 1 < len(ops) and ops[hi + 1][1] <= d_end + 60 and (
+            ops[hi + 1][0] in ("D", "I", "N") or _m_de_insercion(hi + 1)):
+        hi += 1
+
+    c_start = ops[lo][1]
+    last_op, last_pos, last_len = ops[hi][0], ops[hi][1], ops[hi][2]
+    c_end = last_pos + (last_len if last_op != "I" else 0)
+
+    ins_union = "".join(
+        qs for op, rpos, length, qs in ops[lo:hi + 1]
+        if op == "I" or (op == "M" and qs != wt_seq[rpos:rpos + length]))
+
+    flanks = []
+    for op, rpos, length, qs in ops:
+        if op not in ("D", "I"):
+            continue
+        in_5p = c_start - flank <= rpos < c_start
+        in_3p = c_end <= rpos <= c_end + flank
+        if length >= 3 and (in_5p or in_3p):
+            flanks.append((op, rpos - c_start, length,
+                           qs if op == "I" else ""))
+    return (c_start, c_end, ins_union, tuple(flanks))
+
+
 def is_inversion(ev: ReadEvidence, p: Params) -> Tuple[bool, dict]:
     """Detecta inversión del fragmento [ds, de] (split-read o aln interno)."""
     ds = p.deletion_start - 1
@@ -886,6 +972,9 @@ def classify_deletion(ev: ReadEvidence, p: Params) -> Tuple[Optional[str], dict]
         "ins_3p": ev_best.get("ins_3p", 0),
         "ins_total": ins_total,
         "source": source,
+        # eventos observados alrededor de la unión (para el gráfico web);
+        # None si el alineamiento primario WT no contiene la D completa
+        "junction_pattern": _junction_pattern(wt, rs, re_, p.wt_seq),
     }
     if source == "edit_alignment":
         info["edit_cov"] = ev_best.get("edit_cov", 0)
@@ -1027,9 +1116,12 @@ def run_classification(wt_records, edit_records, params: Params,
     ev = collect_evidence_from_records(wt_records, edit_records)
     rows = []
     counts = Counter()
+    junction_patterns: Dict[str, tuple] = {}
     for rid, e in ev.items():
         cls, info = classify_read(e, params)
         counts[cls] += 1
+        if cls and str(cls).startswith("DEL"):
+            junction_patterns[rid] = info.get("junction_pattern") or ()
         rows.append({
             "read_id": rid,
             "length": e.length,
@@ -1048,17 +1140,20 @@ def run_classification(wt_records, edit_records, params: Params,
             "details": ";".join(
                 f"{k}={v}" for k, v in info.items()
                 if k not in ("rule", "obs_start", "obs_end", "obs_len",
-                             "bp5_offset", "bp3_offset", "ins_total")
+                             "bp5_offset", "bp3_offset", "ins_total",
+                             "junction_pattern")
             ),
         })
 
-    # ---- Deleciones recurrentes (para el mapa de lecturas de la web) -------
+    # ---- Deleciones recurrentes (para el gráfico de uniones de la web) -----
     # Agrupa las lecturas DEL por breakpoints observados (0-based,
-    # semiabiertos). El ruido Nanopore dispersa los breakpoints ±pocos nt:
-    # se consolidan en un mismo evento las deleciones cuyos dos extremos
-    # quedan a <= _TOPDEL_TOL nt de un evento ya contado (media ponderada).
+    # semiabiertos) Y por patrón de unión (inserciones en la unión y
+    # deleciones adicionales en los flancos). El ruido Nanopore dispersa
+    # los breakpoints ±pocos nt: se consolidan en un mismo evento las
+    # deleciones cuyos dos extremos quedan a <= _TOPDEL_TOL nt de un evento
+    # ya contado (media ponderada) con el MISMO patrón de unión.
     _TOPDEL_TOL = 10
-    del_events: list = []          # [{start, end, n, ins_total}]
+    del_events: list = []          # [{start, end, n, ins_total, pattern}]
     for r in rows:
         if not str(r["class"]).startswith("DEL"):
             continue
@@ -1072,8 +1167,19 @@ def run_classification(wt_records, edit_records, params: Params,
             ins_ = max(0, int(r["ins_total"] or 0))
         except (TypeError, ValueError):
             ins_ = 0
+        pat_ = junction_patterns.get(r["read_id"])
+        # clave de agrupación: inserción de unión + eventos de flanco con
+        # posiciones redondeadas a 5 nt (el ruido Nanopore las desplaza
+        # ±pocos nt); las coordenadas del cluster no entran en la clave
+        if pat_:
+            key_ = (pat_[2], tuple(
+                (op, 5 * round(rel / 5), ln)
+                for op, rel, ln, _ins in pat_[3]))
+        else:
+            key_ = ()
         for ev in del_events:
-            if (abs(ev["start"] - s_) <= _TOPDEL_TOL
+            if (ev["pattern_key"] == key_
+                    and abs(ev["start"] - s_) <= _TOPDEL_TOL
                     and abs(ev["end"] - e_) <= _TOPDEL_TOL):
                 w = ev["n"]
                 ev["start"] = round((ev["start"] * w + s_) / (w + 1))
@@ -1083,7 +1189,8 @@ def run_classification(wt_records, edit_records, params: Params,
                 break
         else:
             del_events.append(
-                {"start": s_, "end": e_, "n": 1, "ins_total": ins_})
+                {"start": s_, "end": e_, "n": 1, "ins_total": ins_,
+                 "pattern_key": key_, "pattern": pat_})
     del_events.sort(key=lambda ev: -ev["n"])
     top_deletions = [
         {**ev, "length": ev["end"] - ev["start"]}

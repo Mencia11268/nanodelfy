@@ -56,8 +56,9 @@ setTimeout(() => {
     clases_barras: (cls.match(/<rect/g) || []).length,
     micro_svg: mic.includes('<svg'),
     deljunc_bloques: (dj.match(/aln-block/g) || []).length,
-    deljunc_corte: (dj.match(/aln-cut/g) || []).length,
+    deljunc_barra: (dj.match(/del-bar/g) || []).length,
     deljunc_del: (dj.match(/aln-d/g) || []).length,
+    deljunc_ins: (dj.match(/aln-i/g) || []).length,
     indelseq_bloques: (iseq.match(/aln-block/g) || []).length,
     indelseq_del: (iseq.match(/aln-d/g) || []).length,
     indelseq_ins: (iseq.match(/aln-i/g) || []).length,
@@ -115,9 +116,14 @@ JOB = {
                 {"start": 1000, "end": 1999, "length": 999, "n": 40,
                  "pct": 40.0, "ins_total": 0, "desde_guia": "guia_1@1005",
                  "hasta_guia": "", "etiqueta": "guia_1@1005",
-                 "flanco5": "AAAACCCCGGGGTTTTAAAACCCCGGGGT",
-                 "flanco3": "TTTTGGGGCCCCAAAATTTTGGGGCCCCA",
-                 "deletado": ""},
+                 "flanco5": [
+                     {"t": "m", "seq": "AAAACCCCGGGGTTTTAAAACCCC"},
+                     {"t": "d", "seq": "GGGT"},
+                     {"t": "i", "seq": "TTT"},
+                     {"t": "m", "seq": "AA"}],
+                 "flanco3": [
+                     {"t": "m", "seq": "TTTTGGGGCCCCAAAATTTTGGGGCCCCA"}],
+                 "ins_union": "AC"},
             ],
         },
         "files": {},
@@ -149,9 +155,11 @@ def test_job_page_js_renderiza_graficos(tmp_path):
     assert result["micro_svg"], "el gráfico de microindels debe pintarse"
     # secuencia de la unión de deleciones recurrentes
     assert result["deljunc_bloques"] == 1, "debe haber 1 bloque de unión"
-    assert result["deljunc_corte"] == 2, \
-        "las dos bases de la unión deben resaltarse"
-    assert result["deljunc_del"] >= 1, "el segmento eliminado debe ir en rojo"
+    assert result["deljunc_barra"] == 1, "debe pintarse la barra de la deleción"
+    assert result["deljunc_del"] >= 1, \
+        "la deleción del flanco debe ir en rojo tachado"
+    assert result["deljunc_ins"] >= 2, \
+        "las inserciones (unión y flanco) deben ir en azul"
     # alineamiento de indels recurrentes por guía
     assert result["indelseq_bloques"] == 1, "debe haber 1 bloque de guía"
     assert result["indelseq_del"] >= 1, "la deleción debe ir en rojo"

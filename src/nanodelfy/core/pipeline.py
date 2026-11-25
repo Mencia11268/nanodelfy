@@ -7,7 +7,7 @@ from typing import Callable
 from .refs import build_edited_reference
 from .filter_align import filter_reads, align_minimap2
 from .classify import Params, run_classification
-from .microindel import run_microindel_analysis, parse_guides
+from .microindel import run_microindel_analysis, parse_guides, _allele_segments
 from .frt import analizar_frt
 
 
@@ -199,23 +199,60 @@ def run_full_pipeline(
 
         total_reads = cls_stats.get("total_reads") or 1
         _FLANK = 30                 # nt de contexto a cada lado de la unión
+
+        def _flancos(d: dict) -> dict:
+            """Segmentos de secuencia observada alrededor de la unión.
+
+            Usa el patrón de unión observado (cluster de la D en el CIGAR):
+            intervalo [c_start, c_end) para la barra, inserción de la unión
+            (bases de lectura dentro del cluster, azul) y eventos D/I de los
+            flancos (tachadas en rojo / azul). Sin patrón (deleción inferida
+            sin D completa en el alineamiento) se reconstruye desde la
+            referencia.
+            """
+            pat = d.get("pattern")
+            if pat and len(pat) == 4:
+                c_start, c_end, ins_union, flanks = pat
+                c_start, c_end = int(c_start), int(c_end)
+                s0 = max(0, c_start - _FLANK)
+                e1 = min(len(wt_seq), c_end + _FLANK)
+                evs_f5, evs_f3 = [], []
+                for op, rel, _ln, ins in flanks:
+                    rpos = c_start + rel
+                    ev = (op, rpos, _ln, ins or "")
+                    if rpos < c_start:
+                        evs_f5.append(ev)
+                    elif rpos >= c_end:
+                        evs_f3.append(ev)
+                f5 = _allele_segments(wt_seq, s0, c_start, evs_f5) or \
+                    [{"t": "m", "seq": wt_seq[s0:c_start]}]
+                f3 = _allele_segments(wt_seq, c_end, e1, evs_f3) or \
+                    [{"t": "m", "seq": wt_seq[c_end:e1]}]
+                # el intervalo del cluster (barra + flancos) manda sobre la
+                # media de breakpoints al mostrar la unión
+                return {"start": c_start, "end": c_end,
+                        "length": c_end - c_start,
+                        "flanco5": f5, "flanco3": f3,
+                        "ins_union": ins_union or ""}
+            start, end = d["start"], d["end"]
+            s0 = max(0, start - _FLANK)
+            e1 = min(len(wt_seq), end + _FLANK)
+            return {"flanco5": [{"t": "m", "seq": wt_seq[s0:start]}],
+                    "flanco3": [{"t": "m", "seq": wt_seq[end:e1]}],
+                    "ins_union": ""}
+
         deleciones = []
         for d in cls_stats["top_deletions"]:
-            g5, g3 = _guia_cercana(d["start"]), _guia_cercana(d["end"])
-            s0 = max(0, d["start"] - _FLANK)
-            e1 = min(len(wt_seq), d["end"] + _FLANK)
-            deleciones.append({
-                **d,
-                "pct": round(100.0 * d["n"] / total_reads, 2),
-                "desde_guia": g5 or "",
-                "hasta_guia": g3 or "",
-                "etiqueta": " → ".join(x for x in (g5, g3) if x) or
-                            f"del {d['start'] + 1}-{d['end']}",
-                "flanco5": wt_seq[s0:d["start"]],
-                "flanco3": wt_seq[d["end"]:e1],
-                "deletado": (wt_seq[d["start"]:d["end"]]
-                             if d["end"] - d["start"] <= 60 else ""),
-            })
+            item = {**d, **_flancos(d)}      # puede ajustar start/end/length
+            g5, g3 = _guia_cercana(item["start"]), _guia_cercana(item["end"])
+            item["pct"] = round(100.0 * d["n"] / total_reads, 2)
+            item["desde_guia"] = g5 or ""
+            item["hasta_guia"] = g3 or ""
+            item["etiqueta"] = " → ".join(x for x in (g5, g3) if x) or \
+                f"del {item['start'] + 1}-{item['end']}"
+            deleciones.append(item)
+            for k in ("pattern", "pattern_key"):   # internos: no van al JSON
+                deleciones[-1].pop(k, None)
         deletion_view = {
             "ref_len": ref_stats["wt_length"] if ref_stats else None,
             "esperada": {"start": params["deletion_start"] - 1,
