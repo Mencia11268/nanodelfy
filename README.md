@@ -239,8 +239,8 @@ Los tests usan datos sintéticos autogenerados (no requieren descargas).
 
 Si usas nanodelfy, cita la versión archivada en Zenodo:
 
-> Mencia, A., Murillas, R., & Garcia Diez, M. (2026). nanodelfy 1.1.2.
-> Zenodo. https://doi.org/10.5281/zenodo.24498244
+> Mencia, A., Murillas, R., & Garcia Diez, M. (2026). nanodelfy 1.1.3.
+> Zenodo. https://doi.org/10.5281/zenodo.24498243
 
 Para referirse al conjunto de versiones, usa el DOI de concepto:
 https://doi.org/10.5281/zenodo.24498243. El archivo `CITATION.cff` contiene los
