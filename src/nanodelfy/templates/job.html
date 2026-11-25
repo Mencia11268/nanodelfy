@@ -76,6 +76,18 @@
       </div>
     </div>
 
+    <div class="card" id="hap-section" style="display:none">
+      <h2>Haplotipos: combinaciones por lectura</h2>
+      <div id="hap-table-wrap"></div>
+      <div class="info-box" style="margin-top: 16px;">
+        Cada fila es una combinación de las llamadas de todos los sitios de corte
+        observada en las mismas moléculas (<b>en cis</b>). Si dos guías presentan
+        microindels en lecturas distintas (filas separadas), son <b>haplotipos
+        diferentes</b> (en trans). Solo cuentan las lecturas evaluables en todos
+        los sitios.
+      </div>
+    </div>
+
     <div class="card">
       <h2>Descargas</h2>
       <div class="info-box" style="margin-bottom: 14px;">
@@ -116,6 +128,10 @@
         <a href="" id="dl-micro-alleles">
           <div class="title">📄 Microindels: alelos (TSV)</div>
           <div class="desc">Contexto de unión para verificación</div>
+        </a>
+        <a href="" id="dl-hap">
+          <div class="title">📄 Microindels: haplotipos (TSV)</div>
+          <div class="desc">Combinaciones por lectura (cis/trans)</div>
         </a>
       </div>
       <div class="info-box" style="margin-top: 16px;">
@@ -261,6 +277,30 @@
       document.getElementById('dl-micro-summary').href = `/api/download/${jobId}/micro_summary`;
       document.getElementById('dl-micro-read').href    = `/api/download/${jobId}/micro_per_read`;
       document.getElementById('dl-micro-alleles').href = `/api/download/${jobId}/micro_alleles`;
+      const hap = job.result.microindels.haplotipos;
+      if (hap && hap.rows && hap.rows.length) {
+        document.getElementById('hap-section').style.display = '';
+        document.getElementById('dl-hap').href = `/api/download/${jobId}/micro_haplotipos`;
+        const keys = Object.keys(hap.rows[0]);
+        const siteCols = keys.filter(k => k !== 'haplotipo' && k !== 'n_lecturas'
+                                           && k !== 'pct_sobre_faseables');
+        let html = '<table class="results"><thead><tr>'
+          + '<th>Haplotipo</th>'
+          + siteCols.map(c => `<th>${c}</th>`).join('')
+          + '<th class="num">Lecturas</th>'
+          + '<th class="num">% faseables</th></tr></thead><tbody>';
+        hap.rows.forEach(r => {
+          const hasIndel = siteCols.some(c => r[c] && r[c] !== 'sin_indel');
+          html += `<tr${hasIndel ? ' style="background:#fff7ed;"' : ''}>`
+            + `<td>${r.haplotipo}</td>`
+            + siteCols.map(c => `<td>${r[c] ?? ''}</td>`).join('')
+            + `<td class="num">${r.n_lecturas}</td>`
+            + `<td class="num">${r.pct_sobre_faseables}</td></tr>`;
+        });
+        html += `</tbody></table><div class="info-box" style="margin-top:10px;">`
+          + `Lecturas faseables (evaluables en todos los sitios): ${hap.n_faseables}</div>`;
+        document.getElementById('hap-table-wrap').innerHTML = html;
+      }
       renderMicroChart(job.result.microindels);
       } catch (e) {
         console.error('microindels', e);

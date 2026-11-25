@@ -163,6 +163,8 @@ def run_full_pipeline(
             "micro_per_read": micro_stats["files"]["per_read"],
             "micro_summary":  micro_stats["files"]["summary"],
             "micro_alleles":  micro_stats["files"]["alleles"],
+            **({"micro_haplotipos": micro_stats["files"]["haplotipos"]}
+               if micro_stats["files"].get("haplotipos") else {}),
         })
     if frt_stats:
         files.update({

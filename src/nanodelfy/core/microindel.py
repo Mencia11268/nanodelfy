@@ -639,6 +639,49 @@ def run_microindel_analysis(
         df_read.to_csv(f"{out_prefix}.microindels_per_read.tsv", sep="\t",
                        index=False)
 
+    # --- Haplotipos: combinación de llamadas de TODOS los sitios de corte
+    # --- en la MISMA lectura (fase cis/trans entre sitios).
+    # Solo entran lecturas evaluables (NO_INDEL o MICROINDEL) en todos los
+    # sitios; las lecturas con deleción grande o no evaluables en algún
+    # sitio se excluyen del recuento de haplotipos.
+    hap_rows: list = []
+    n_hap_reads = 0
+    hap_file = None
+    if len(sites) > 1 and not df_read.empty:
+        df_hap = df_read[df_read["categoria"].isin(["NO_INDEL", "MICROINDEL"])]
+        if not df_hap.empty:
+            sitios_por_read = df_hap.groupby("read_id")["sitio"].nunique()
+            full_reads = sitios_por_read[
+                sitios_por_read == len(sites)].index
+            n_hap_reads = len(full_reads)
+            if n_hap_reads:
+                per_read: Dict[str, list] = {}
+                for _, r in df_hap[df_hap["read_id"].isin(full_reads)] \
+                        .iterrows():
+                    per_read.setdefault(r["read_id"], []).append(
+                        (r["sitio"], r["categoria"], r["alelo"]))
+                combo_counts = Counter(
+                    tuple(sorted(v)) for v in per_read.values())
+                for i, (combo, n) in enumerate(combo_counts.most_common(), 1):
+                    row = {
+                        "haplotipo": f"hap_{i:03d}",
+                        "n_lecturas": n,
+                        "pct_sobre_faseables": round(
+                            100 * n / n_hap_reads, 2),
+                    }
+                    for sitio, cat, alelo in combo:
+                        row[sitio] = (
+                            alelo if cat == "MICROINDEL" and alelo
+                            else "sin_indel" if cat == "NO_INDEL"
+                            else cat)
+                    hap_rows.append(row)
+                hap_file = f"{out_prefix}.microindels_haplotipos.tsv"
+                pd.DataFrame(hap_rows).to_csv(hap_file, sep="\t",
+                                              index=False)
+                log(f"  · haplotipos: {n_hap_reads} lecturas faseables en "
+                    f"{len(sites)} sitios, {len(hap_rows)} combinaciones "
+                    f"(cis/trans)")
+
     # Comprobación de coherencia numerador/denominador
     for s in sites:
         st = site_stats[s.site_id]
@@ -667,10 +710,15 @@ def run_microindel_analysis(
         "sites": [s.site_id for s in sites],
         "guias_no_localizadas": no_localizadas,
         "summary": df_sum.to_dict("records"),
+        "haplotipos": {
+            "n_faseables": n_hap_reads,
+            "rows": hap_rows,
+        },
         "files": {
             "per_read": f"{out_prefix}.microindels_per_read.tsv",
             "summary": f"{out_prefix}.microindels_summary.tsv",
             "alleles": f"{out_prefix}.microindels_alleles.tsv",
+            **({"haplotipos": hap_file} if hap_file else {}),
         },
     }
 
