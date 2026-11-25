@@ -48,15 +48,16 @@ setTimeout(() => {
   const g = id => (elements[id] || {})._html || '';
   const cls = g('chart-classes');
   const mic = g('chart-micro');
-  const dmap = g('delmap-wrap');
+  const dj = g('deljunc-wrap');
   const iseq = g('indelseq-wrap');
   console.log('RESULT ' + JSON.stringify({
     errores,
     clases_svg: cls.includes('<svg'),
     clases_barras: (cls.match(/<rect/g) || []).length,
     micro_svg: mic.includes('<svg'),
-    delmap_svg: dmap.includes('<svg'),
-    delmap_filas: (dmap.match(/height="10"/g) || []).length,
+    deljunc_bloques: (dj.match(/aln-block/g) || []).length,
+    deljunc_corte: (dj.match(/aln-cut/g) || []).length,
+    deljunc_del: (dj.match(/aln-d/g) || []).length,
     indelseq_bloques: (iseq.match(/aln-block/g) || []).length,
     indelseq_del: (iseq.match(/aln-d/g) || []).length,
     indelseq_ins: (iseq.match(/aln-i/g) || []).length,
@@ -113,7 +114,10 @@ JOB = {
             "deleciones": [
                 {"start": 1000, "end": 1999, "length": 999, "n": 40,
                  "pct": 40.0, "ins_total": 0, "desde_guia": "guia_1@1005",
-                 "hasta_guia": "", "etiqueta": "guia_1@1005"},
+                 "hasta_guia": "", "etiqueta": "guia_1@1005",
+                 "flanco5": "AAAACCCCGGGGTTTTAAAACCCCGGGGT",
+                 "flanco3": "TTTTGGGGCCCCAAAATTTTGGGGCCCCA",
+                 "deletado": ""},
             ],
         },
         "files": {},
@@ -143,9 +147,11 @@ def test_job_page_js_renderiza_graficos(tmp_path):
     assert result["clases_svg"], "el gráfico de clases debe pintarse"
     assert result["clases_barras"] >= 2, "deben pintarse barras (WT + CALIB)"
     assert result["micro_svg"], "el gráfico de microindels debe pintarse"
-    # mapa de deleciones recurrentes
-    assert result["delmap_svg"], "el mapa de deleciones debe pintarse"
-    assert result["delmap_filas"] == 1, "debe pintarse 1 fila de deleción"
+    # secuencia de la unión de deleciones recurrentes
+    assert result["deljunc_bloques"] == 1, "debe haber 1 bloque de unión"
+    assert result["deljunc_corte"] == 2, \
+        "las dos bases de la unión deben resaltarse"
+    assert result["deljunc_del"] >= 1, "el segmento eliminado debe ir en rojo"
     # alineamiento de indels recurrentes por guía
     assert result["indelseq_bloques"] == 1, "debe haber 1 bloque de guía"
     assert result["indelseq_del"] >= 1, "la deleción debe ir en rojo"

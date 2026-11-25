@@ -198,9 +198,12 @@ def run_full_pipeline(
             return mejor
 
         total_reads = cls_stats.get("total_reads") or 1
+        _FLANK = 30                 # nt de contexto a cada lado de la unión
         deleciones = []
         for d in cls_stats["top_deletions"]:
             g5, g3 = _guia_cercana(d["start"]), _guia_cercana(d["end"])
+            s0 = max(0, d["start"] - _FLANK)
+            e1 = min(len(wt_seq), d["end"] + _FLANK)
             deleciones.append({
                 **d,
                 "pct": round(100.0 * d["n"] / total_reads, 2),
@@ -208,6 +211,10 @@ def run_full_pipeline(
                 "hasta_guia": g3 or "",
                 "etiqueta": " → ".join(x for x in (g5, g3) if x) or
                             f"del {d['start'] + 1}-{d['end']}",
+                "flanco5": wt_seq[s0:d["start"]],
+                "flanco3": wt_seq[d["end"]:e1],
+                "deletado": (wt_seq[d["start"]:d["end"]]
+                             if d["end"] - d["start"] <= 60 else ""),
             })
         deletion_view = {
             "ref_len": ref_stats["wt_length"] if ref_stats else None,

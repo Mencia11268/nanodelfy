@@ -144,6 +144,11 @@ def test_pipeline_end_to_end(mini_dataset, tmp_path):
     assert abs(top["end"] - DEL_END) <= 15
     assert dv["cortes"], "falta la lista de cortes de guía"
     assert "test" in dv["cortes"][0]["sitio"], "falta el corte de la guía"
+    # flancos de la unión reconstruidos desde la referencia WT
+    assert top["flanco5"] == wt_seq[top["start"] - 30:top["start"]]
+    assert top["flanco3"] == wt_seq[top["end"]:top["end"] + 30]
+    assert len(top["flanco5"]) == 30 and len(top["flanco3"]) == 30
+    assert top["deletado"] == ""    # deleción de 120 nt > 60: abreviada
 
     # 5. Alelos recurrentes por guía (para el gráfico de secuencia web)
     ad = res["microindels"]["alleles_display"]

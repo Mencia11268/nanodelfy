@@ -57,15 +57,17 @@
       <div id="chart-classes"></div>
     </div>
 
-    <div class="card" id="delmap-section" style="display:none">
-      <h2>Deleciones recurrentes: mapa de lecturas</h2>
-      <div id="delmap-wrap"></div>
+    <div class="card" id="deljunc-section" style="display:none">
+      <h2>Deleciones recurrentes: secuencia de la unión</h2>
+      <div id="deljunc-wrap"></div>
       <div class="info-box" style="margin-top: 16px;">
-        Cada fila es una deleción observada (agrupando lecturas con los mismos
-        breakpoints), de más a menos frecuente. La banda roja clara marca la
-        deleción esperada y las líneas discontinuas los cortes de las guías;
-        las barras rojas, el segmento ausente de cada lectura. Solo deleciones
-        clasificadas (clases DEL).
+        Para cada deleción recurrente (agrupando lecturas con los mismos
+        breakpoints, de más a menos frecuente) se muestra la secuencia que
+        queda flanqueando los puntos de corte: 30 nt del flanco 5' inmediatamente
+        seguidos de 30 nt del flanco 3'. Las dos bases de la unión están
+        resaltadas; debajo, en rojo, el segmento eliminado (abreviado si mide
+        más de 60 nt). La secuencia se reconstruye desde la referencia WT, no
+        se lee directamente de la lectura: no incluye inserciones de NHEJ.
       </div>
     </div>
 
@@ -278,44 +280,35 @@
     }
   }
 
-  // ---------- Mapa de lecturas: deleciones recurrentes guía-a-guía ----------
-  function renderDelMap(view) {
-    const sec = document.getElementById('delmap-section');
-    const wrap = document.getElementById('delmap-wrap');
-    if (!view || !view.ref_len || !view.deleciones || !view.deleciones.length) {
+  // ---------- Deleciones recurrentes: secuencia de la unión ----------
+  function renderDelJunctions(view) {
+    const sec = document.getElementById('deljunc-section');
+    const wrap = document.getElementById('deljunc-wrap');
+    if (!view || !view.deleciones || !view.deleciones.length) {
       sec.style.display = 'none';
       return;
     }
-    const W = 760, padL = 205, padR = 15, rowH = 22, top = 46;
-    const x = pos => padL + (pos / view.ref_len) * (W - padL - padR);
-    const n = view.deleciones.length;
-    const H = top + n * rowH + 12;
-    let svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;font-family:inherit" xmlns="http://www.w3.org/2000/svg" role="img">`;
-    const e = view.esperada;
-    if (e && toNum(e.end) !== null && e.end > e.start) {
-      svg += `<rect x="${x(e.start)}" y="32" width="${Math.max(1.5, x(e.end) - x(e.start))}" ` +
-        `height="${H - 38}" fill="#fecaca" opacity="0.5"></rect>`;
-    }
-    svg += `<line x1="${padL}" y1="32" x2="${W - padR}" y2="32" stroke="#9ca3af" stroke-width="1"></line>`;
-    (view.cortes || []).forEach((c, i) => {
-      const cx = x(c.pos);
-      svg += `<line x1="${cx}" y1="32" x2="${cx}" y2="${H - 8}" stroke="#2563eb" ` +
-        `stroke-dasharray="4 3" stroke-width="1.5"></line>`;
-      svg += `<text x="${cx}" y="${20 + (i % 2) * 11}" text-anchor="middle" ` +
-        `font-size="10" fill="#2563eb">${esc(c.sitio)}</text>`;
+    let html = '';
+    view.deleciones.forEach(d => {
+      const f5 = d.flanco5 || '';
+      const f3 = d.flanco3 || '';
+      html += `<div class="aln-block">` +
+        `<h3>${esc(d.etiqueta)} · ${d.n} lecturas (${d.pct}%) · ` +
+        `deleción de ${d.length} nt · unión ${d.start + 1}|${d.end + 1}</h3>`;
+      // unión: última base del flanco 5' + primera del flanco 3', resaltadas
+      html += `<div class="aln-row"><div class="aln-label">Unión 5'→3'</div>` +
+        `<div class="aln">${esc(f5.slice(0, -1))}` +
+        `<span class="aln-cut">${esc(f5.slice(-1))}</span>` +
+        `<span class="aln-cut">${esc(f3.charAt(0))}</span>` +
+        `${esc(f3.slice(1))}</div></div>`;
+      // segmento eliminado: completo si <=60 nt, abreviado si no
+      const delSeq = d.deletado ||
+        `······· deleción de ${d.length} nt ·······`;
+      html += `<div class="aln-row"><div class="aln-label">Eliminado</div>` +
+        `<div class="aln"><span class="aln-d">${esc(delSeq)}</span></div></div>`;
+      html += `</div>`;
     });
-    view.deleciones.forEach((d, i) => {
-      const y = top + i * rowH;
-      svg += `<text x="${padL - 8}" y="${y + 4}" text-anchor="end" font-size="11" ` +
-        `fill="#374151">${esc(d.etiqueta)} · ${d.n} (${d.pct}%)</text>`;
-      svg += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" ` +
-        `stroke="#e5e7eb" stroke-width="6" stroke-linecap="round"></line>`;
-      const x1 = x(d.start);
-      const x2 = Math.max(x(d.end), x1 + 2);
-      svg += `<rect x="${x1}" y="${y - 5}" width="${x2 - x1}" height="10" rx="2" fill="#dc2626"></rect>`;
-    });
-    svg += '</svg>';
-    wrap.innerHTML = svg;
+    wrap.innerHTML = html;
     sec.style.display = '';
   }
 
@@ -390,9 +383,9 @@
       console.error('renderSummary', e);
     }
     try {
-      renderDelMap(job.result.deletion_view);
+      renderDelJunctions(job.result.deletion_view);
     } catch (e) {
-      console.error('renderDelMap', e);
+      console.error('renderDelJunctions', e);
     }
     if (job.result.microindels) {
       try {
