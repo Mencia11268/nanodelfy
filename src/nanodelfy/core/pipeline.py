@@ -4,7 +4,7 @@ import shutil, zipfile, traceback
 from pathlib import Path
 from typing import Callable
 
-from .refs import build_edited_reference
+from .refs import build_edited_reference, parse_first_fasta_record
 from .filter_align import filter_reads, align_minimap2
 from .classify import Params, run_classification
 from .microindel import (run_microindel_analysis, parse_guides,
@@ -28,12 +28,45 @@ def run_full_pipeline(
     out_dir = job_dir / "results"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # ------- 1) Construir referencia editada
-    set_progress(10, "Construyendo referencia editada")
-    log("[1/4] Construyendo referencia editada...")
+    # ------- 0) Coordenadas de la deleción: explícitas o desde las guías
     wt_fa = job_dir / "amplicon_WT.fa"
     edit_fa = job_dir / "amplicon_EDIT.fa"
     shutil.copy(wt_fasta_path, wt_fa)
+    wt_seq = str(parse_first_fasta_record(wt_fa).seq).upper()
+
+    if not params.get("deletion_start") or not params.get("deletion_end"):
+        guides_text = params.get("guides", "") or ""
+        guides = parse_guides(guides_text) if guides_text.strip() else {}
+        if len(guides) < 2:
+            raise ValueError(
+                "Faltan las coordenadas de la deleción (deletion_start/"
+                "deletion_end). Indícalas, o introduce al menos dos guías "
+                "para calcularlas de sus cortes.")
+        log("Coordenadas de la deleción no indicadas: se calculan de los "
+            "cortes de las guías...")
+        sitios = locate_cut_sites(
+            wt_seq, guides,
+            nuclease=params.get("nuclease", "cas9"),
+            max_mismatch=params.get("guide_max_mismatch", 1), log=log)
+        pares = [(a, b) for a in sitios for b in sitios
+                 if a.guide_label != b.guide_label and a.cut_pos < b.cut_pos]
+        if not pares:
+            raise ValueError(
+                "No se localizan cortes de dos guías distintas en el "
+                "amplicón WT; no se puede derivar la deleción teórica.")
+        lo, hi = max(pares, key=lambda p: p[1].cut_pos - p[0].cut_pos)
+        # cut_pos es 0-based "entre bases": la deleción abarca las bases
+        # [lo.cut_pos, hi.cut_pos) → 1-based inclusiva lo.cut_pos+1..hi.cut_pos
+        params = {**params,
+                  "deletion_start": lo.cut_pos + 1,
+                  "deletion_end": hi.cut_pos}
+        log(f"  Deleción derivada de las guías ({lo.nuclease}): "
+            f"{hi.cut_pos - lo.cut_pos} nt, coordenadas "
+            f"{params['deletion_start']}-{params['deletion_end']} (1-based)")
+
+    # ------- 1) Construir referencia editada
+    set_progress(10, "Construyendo referencia editada")
+    log("[1/4] Construyendo referencia editada...")
     ref_stats = build_edited_reference(
         wt_fa, edit_fa,
         deletion_start=params["deletion_start"],
@@ -66,9 +99,8 @@ def run_full_pipeline(
     # ------- 4) Clasificación
     set_progress(85, "Clasificando lecturas")
     log("[4/4] Clasificando lecturas...")
-    # Parche R3EB_B: secuencia WT para reconstruir uniones desde soft-clips
-    from .refs import parse_first_fasta_record
-    wt_seq = str(parse_first_fasta_record(wt_fa).seq).upper()
+    # (wt_seq se leyó en el paso 0; parche R3EB_B: reconstruir uniones
+    # desde soft-clips con la secuencia WT)
     p = Params(
         deletion_start=params["deletion_start"],
         deletion_end=params["deletion_end"],

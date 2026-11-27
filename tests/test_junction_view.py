@@ -155,3 +155,52 @@ def test_deleccion_teorica_desde_guias(tmp_path):
     assert t["size"] == corte2 - corte1
     # el resto de la vista no se ve afectado
     assert res["deletion_view"]["deleciones"][0]["n"] == 20
+
+
+def test_coordenadas_de_deleccion_derivadas_de_guias(tmp_path):
+    """Sin deletion_start/end: se derivan de los cortes de dos guías.
+
+    Las lecturas precisas deben clasificarse DEL_EXACT con la deleción
+    derivada de las guías, y `esperada` debe coincidir con `teorica`.
+    """
+    rng = random.Random(42)
+    wt = "".join(rng.choice("ACGT") for _ in range(WT_LEN))
+    _write_fasta(tmp_path / "wt.fa", wt)
+
+    a1, sp1 = _guia_cas9_mas_arriba(wt, 950)
+    a2, sp2 = _guia_cas9_mas_arriba(wt, 1400)
+    corte1, corte2 = a1 + 17, a2 + 17
+    # deleción que dejarían los dos cortes: 1-based [corte1+1, corte2]
+    edited = wt[:corte1] + wt[corte2:]
+
+    reads = ([(f"precise_{i}", edited) for i in range(20)]
+             + [(f"wt_{i}", wt) for i in range(20)])
+    rng.shuffle(reads)
+    fq = tmp_path / "muestra3.fastq"
+    with open(fq, "w") as f:
+        for rid, s in reads:
+            f.write(f"@{rid}\n{s}\n+\n{'I' * len(s)}\n")
+
+    res = run_full_pipeline(
+        tmp_path / "job3", fq, tmp_path / "wt.fa", "mix3",
+        params={
+            "deletion_start": None, "deletion_end": None,
+            "min_quality": 10, "min_length": 1500, "max_length": 3500,
+            "breakpoint_tolerance": 20, "min_sv_deletion": 100,
+            "nhej_search_window": 200,
+            "guides": f"guia_A: {sp1}\nguia_B: {sp2}",
+            "nuclease": "cas9", "guide_max_mismatch": 0,
+        },
+        log=lambda m: None,
+    )
+
+    dv = res["deletion_view"]
+    t = dv["teorica"]
+    assert t and t["size"] == corte2 - corte1
+    # las coordenadas derivadas pasan a ser la deleción esperada
+    assert dv["esperada"]["start"] == corte1
+    assert dv["esperada"]["end"] == corte2
+    # las lecturas precisas (según los cortes) son DEL_EXACT
+    resumen = {r["class"]: r["reads"]
+               for r in res["classification"]["summary"]}
+    assert resumen.get("DEL_EXACT") == 20, resumen

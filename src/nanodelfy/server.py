@@ -60,8 +60,8 @@ async def api_run(
     fastq: UploadFile = File(...),
     wt_fasta: UploadFile = File(...),
     sample_name: str = Form("sample"),
-    deletion_start: int = Form(...),
-    deletion_end: int = Form(...),
+    deletion_start: str = Form(""),
+    deletion_end: str = Form(""),
     min_quality: int = Form(10),
     min_length: int = Form(800),
     max_length: int = Form(4000),
@@ -84,8 +84,30 @@ async def api_run(
     microindel_large_del_threshold: int = Form(100),
 ):
     # Validaciones rápidas
-    if deletion_start <= 0 or deletion_end <= deletion_start:
-        raise HTTPException(400, "Coordenadas inválidas: end debe ser mayor que start (1-based).")
+    def _coord(valor: str, nombre: str):
+        valor = (valor or "").strip()
+        if not valor:
+            return None
+        try:
+            n = int(valor)
+        except ValueError:
+            raise HTTPException(400, f"{nombre} debe ser un número entero.")
+        if n < 1:
+            raise HTTPException(400, f"{nombre} debe ser >= 1 (1-based).")
+        return n
+
+    del_start = _coord(deletion_start, "Inicio de la deleción")
+    del_end = _coord(deletion_end, "Fin de la deleción")
+    if (del_start is None) != (del_end is None):
+        raise HTTPException(400, "Indica ambas coordenadas de la deleción "
+                                  "o ninguna (se calculan desde las guías).")
+    if del_start is not None and del_end <= del_start:
+        raise HTTPException(400, "Coordenadas inválidas: end debe ser mayor "
+                                 "que start (1-based).")
+    if del_start is None and not (guides or "").strip():
+        raise HTTPException(400, "Sin coordenadas de la deleción necesitas "
+                                  "al menos dos guías para calcularlas "
+                                  "automáticamente.")
 
     sample_name = _safe_sample_name(sample_name)
     job_id = datetime.now().strftime("%Y%m%d_%H%M%S_") + uuid.uuid4().hex[:6]
@@ -105,8 +127,8 @@ async def api_run(
         shutil.copyfileobj(wt_fasta.file, f)
 
     params = {
-        "deletion_start": deletion_start,
-        "deletion_end": deletion_end,
+        "deletion_start": del_start,
+        "deletion_end": del_end,
         "min_quality": min_quality,
         "min_length": min_length,
         "max_length": max_length,

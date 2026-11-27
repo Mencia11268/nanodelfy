@@ -68,7 +68,7 @@ nanodelfy web            # abre http://127.0.0.1:8765
 ```
 
 Sube tu FASTQ y el FASTA del amplicón WT, indica las coordenadas de la deleción
-esperada y las guías, y pulsa Ejecutar.
+esperada (o deja que las calculen las guías) y pulsa Ejecutar.
 
 ### Línea de comandos
 
@@ -96,7 +96,7 @@ Los mismos parámetros funcionan en la web (campos del formulario) y en el CLI.
 
 | Parámetro | Por defecto | Descripción |
 |---|---|---|
-| `deletion_start`, `deletion_end` | obligatorio | Coordenadas 1-based inclusivas de la deleción esperada sobre el amplicón WT. **Es el único dato obligatorio.** |
+| `deletion_start`, `deletion_end` | obligatorio* | Coordenadas 1-based inclusivas de la deleción esperada sobre el amplicón WT. *Se pueden omitir si se introducen dos o más guías: la deleción esperada se calcula de los cortes de las guías según la nucleasa. |
 | `min_quality` | 10 | Calidad media mínima por lectura (Phred). Bájalo a 7 para datos ruidosos. |
 | `min_length`, `max_length` | 200 / 5000 | Longitud mínima/máxima de lectura tras el filtrado. Ajusta al rango esperado de tu amplicón (p. ej. 800-5000 para amplicones de ~3,9 kb). |
 | `breakpoint_tolerance` | 50 | Tolerancia (nt) para considerar una unión de deleción "exacta". |

@@ -48,18 +48,21 @@
       <div class="row">
         <div class="field">
           <label>Inicio (1-based)</label>
-          <input type="number" name="deletion_start" min="1" value="600" required>
+          <input type="number" name="deletion_start" min="1" placeholder="auto">
         </div>
         <div class="field">
           <label>Fin (1-based, inclusivo)</label>
-          <input type="number" name="deletion_end" min="2" value="2599" required>
+          <input type="number" name="deletion_end" min="2" placeholder="auto">
         </div>
         <div class="field">
           <label>Tamaño calculado</label>
-          <input type="text" id="del-size" value="2000 nt" readonly>
+          <input type="text" id="del-size" value="" readonly>
           <div class="hint">Se actualiza automáticamente</div>
         </div>
       </div>
+      <div class="hint">Déjalas vacías para calcularlas automáticamente a partir
+        de los cortes de dos o más guías introducidas en el paso 4 (según la
+        nucleasa seleccionada).</div>
     </div>
 
     <div class="card">
@@ -199,9 +202,15 @@
   function updateDelSize() {
     const s = parseInt(document.querySelector('[name=deletion_start]').value) || 0;
     const e = parseInt(document.querySelector('[name=deletion_end]').value) || 0;
-    const size = (e >= s && s > 0) ? (e - s + 1) : 0;
-    document.getElementById('del-size').value = size + ' nt';
+    if (e >= s && s > 0) {
+      document.getElementById('del-size').value = (e - s + 1) + ' nt';
+    } else if (!s && !e) {
+      document.getElementById('del-size').value = 'auto (guías)';
+    } else {
+      document.getElementById('del-size').value = '';
+    }
   }
+  updateDelSize();
   document.querySelector('[name=deletion_start]').addEventListener('input', updateDelSize);
   document.querySelector('[name=deletion_end]').addEventListener('input', updateDelSize);
 

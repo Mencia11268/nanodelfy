@@ -66,20 +66,31 @@ def _cmd_run(args: argparse.Namespace) -> None:
         if key in params:
             params[key] = val
 
-    if not params.get("deletion_start") or not params.get("deletion_end"):
+    ds, de = params.get("deletion_start"), params.get("deletion_end")
+    if ds is None and de is None:
+        if not params.get("guides"):
+            raise SystemExit(
+                "Faltan las coordenadas de la deleción esperada: usa "
+                "--del-start/--del-end, un --preset que las incluya o "
+                "--guides con dos o más guías para calcularlas "
+                "(1-based, inclusivo, sobre el amplicón WT).")
+        # ambas vacías con guías: las calcula el pipeline
+    elif ds is None or de is None:
         raise SystemExit(
-            "Faltan las coordenadas de la deleción esperada: usa "
-            "--del-start/--del-end o un --preset que las incluya "
-            "(1-based, inclusivo, sobre el amplicón WT).")
+            "Indica ambas coordenadas (--del-start y --del-end) o ninguna "
+            "(se calculan desde las guías).")
 
-    res = run_full_pipeline(
-        job_dir=Path(args.out),
-        fastq_path=Path(args.fastq),
-        wt_fasta_path=Path(args.wt),
-        sample_name=args.name or Path(args.fastq).stem.split(".")[0],
-        params=params,
-        log=lambda m: print(m),
-    )
+    try:
+        res = run_full_pipeline(
+            job_dir=Path(args.out),
+            fastq_path=Path(args.fastq),
+            wt_fasta_path=Path(args.wt),
+            sample_name=args.name or Path(args.fastq).stem.split(".")[0],
+            params=params,
+            log=lambda m: print(m),
+        )
+    except ValueError as e:
+        raise SystemExit(f"Error: {e}")
     out_dir = Path(args.out) / "results"
     print(f"\nResultados en {out_dir}")
     for k in ("read_classification", "summary", "microindels_summary"):
@@ -145,10 +156,10 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--min-mapq", type=int, default=None)
     run.add_argument("--wt-min", type=int, default=None,
                     help="longitud mínima de lecturas 'tipo WT' "
-                         "(por defecto: amplicón −4 %)")
+                         "(por defecto: amplicón −4 %%)")
     run.add_argument("--wt-max", type=int, default=None,
                     help="longitud máxima de lecturas 'tipo WT' "
-                         "(por defecto: amplicón +4 %)")
+                         "(por defecto: amplicón +4 %%)")
     run.add_argument("--nhej-search-window", type=int, default=None)
     run.add_argument("--guides", default=None,
                     help="guías, una por línea: 'etiqueta: SECUENCIA' "
