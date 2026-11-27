@@ -1149,45 +1149,10 @@ def run_classification(wt_records, edit_records, params: Params,
     # Agrupa las lecturas DEL por breakpoints observados (0-based,
     # semiabiertos) Y por patrón de unión (inserciones en la unión y
     # deleciones adicionales en los flancos). El ruido Nanopore dispersa
-    # los breakpoints ±pocos nt y, sobre todo, las bases de compensación
-    # de homopolímeros (p. ej. 3A que pasan a 2) acaban en el borde 5' de
-    # la inserción cuando esta es una copia aproximada de la referencia
-    # dentro de la región delecada: el alineador desliza su anclaje y las
-    # bases sobrantes se muestran como inserción sin serlo. Se consolidan
-    # en un mismo evento las deleciones cuyos extremos quedan a
-    # <= _TOPDEL_TOL nt y cuyas inserciones difieren en <= max(2, 15%)
-    # nt de edición (mismos eventos de flanco); se muestra la forma de
-    # inserción más frecuente (a igualdad, la más corta).
+    # los breakpoints ±pocos nt: se consolidan en un mismo evento las
+    # deleciones cuyos dos extremos quedan a <= _TOPDEL_TOL nt de un evento
+    # ya contado (media ponderada) con el MISMO patrón de unión.
     _TOPDEL_TOL = 10
-
-    def _dist_edicion(a: str, b: str, corte: int) -> int:
-        """Distancia de Levenshtein con corte temprano (cadenas cortas)."""
-        if abs(len(a) - len(b)) > corte:
-            return corte + 1
-        prev = list(range(len(b) + 1))
-        for i, ca in enumerate(a, 1):
-            cur = [i]
-            for j, cb in enumerate(b, 1):
-                cur.append(min(prev[j] + 1, cur[-1] + 1,
-                               prev[j - 1] + (ca != cb)))
-            if min(cur) > corte:
-                return corte + 1
-            prev = cur
-        return prev[-1]
-
-    def _claves_compatibles(ka, kb) -> bool:
-        """¿Dos claves de patrón (ins, flancos) son la misma variante?"""
-        if ka == kb:
-            return True
-        if not ka or not kb:
-            return False
-        ins_a, fl_a = ka
-        ins_b, fl_b = kb
-        if fl_a != fl_b:
-            return False
-        corte = max(2, round(0.15 * max(len(ins_a), len(ins_b))))
-        return _dist_edicion(ins_a, ins_b, corte) <= corte
-
     del_events: list = []          # [{start, end, n, ins_total, pattern}]
     for r in rows:
         if not str(r["class"]).startswith("DEL"):
@@ -1213,7 +1178,7 @@ def run_classification(wt_records, edit_records, params: Params,
         else:
             key_ = ()
         for ev in del_events:
-            if (_claves_compatibles(ev["pattern_key"], key_)
+            if (ev["pattern_key"] == key_
                     and abs(ev["start"] - s_) <= _TOPDEL_TOL
                     and abs(ev["end"] - e_) <= _TOPDEL_TOL):
                 w = ev["n"]
@@ -1221,29 +1186,14 @@ def run_classification(wt_records, edit_records, params: Params,
                 ev["end"] = round((ev["end"] * w + e_) / (w + 1))
                 ev["n"] += 1
                 ev["ins_total"] += ins_
-                if pat_:
-                    ev["ins_counts"][pat_[2]] = \
-                        ev["ins_counts"].get(pat_[2], 0) + 1
-                    ev["ins_pats"].setdefault(pat_[2], pat_)
                 break
         else:
             del_events.append(
                 {"start": s_, "end": e_, "n": 1, "ins_total": ins_,
-                 "pattern_key": key_, "pattern": pat_,
-                 "ins_counts": {pat_[2]: 1} if pat_ else {},
-                 "ins_pats": {pat_[2]: pat_} if pat_ else {}})
-    # forma de inserción a mostrar: la más frecuente (a igualdad, la más
-    # corta: menos bases de compensación de alineamiento en los bordes)
-    for ev in del_events:
-        if ev["ins_counts"]:
-            mejor = min(ev["ins_counts"],
-                        key=lambda s: (-ev["ins_counts"][s], len(s), s))
-            ev["pattern"] = ev["ins_pats"][mejor]
+                 "pattern_key": key_, "pattern": pat_})
     del_events.sort(key=lambda ev: -ev["n"])
     top_deletions = [
-        {**{k: v for k, v in ev.items()
-            if k not in ("ins_counts", "ins_pats")},
-         "length": ev["end"] - ev["start"]}
+        {**ev, "length": ev["end"] - ev["start"]}
         for ev in del_events[:12]
     ]
 
