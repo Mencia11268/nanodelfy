@@ -37,6 +37,24 @@
 
   <div id="results-section" style="display:none">
 
+    <div class="card" id="muestras-section" style="display:none">
+      <h2>Muestras del análisis</h2>
+      <div id="muestras-tabs"></div>
+      <div class="hint" style="margin-top:8px;">Se han analizado varios
+        FASTQ con las mismas condiciones. Cambia de muestra para ver sus
+        resultados y descargas.</div>
+    </div>
+
+    <div class="card" id="comparativa-section" style="display:none">
+      <h2>Comparativa de muestras</h2>
+      <div id="comparativa-wrap"></div>
+      <div class="info-box" style="margin-top: 16px;">
+        Lecturas (y frecuencia sobre el total de lecturas clasificadas)
+        de cada clase en cada muestra, con las mismas condiciones de
+        análisis.
+      </div>
+    </div>
+
     <div class="card">
       <h2>Resumen de clasificación</h2>
       <table class="results" id="summary-table">
@@ -388,36 +406,101 @@
     });
   }
 
-  function showResults(job) {
-    document.getElementById('results-section').style.display = '';
+  let muestras = [];          // [{name, result}]
+  let dlMulti = false;        // formato nuevo (varias muestras por trabajo)
+
+  function dlHref(i, kind) {
+    return dlMulti
+      ? `/api/download/${jobId}/s${i}_${kind}`
+      : `/api/download/${jobId}/${kind}`;
+  }
+
+  let tabButtons = [];
+
+  function renderTabs() {
+    tabButtons = [];
+    if (muestras.length < 2) return;
+    document.getElementById('muestras-section').style.display = '';
+    const wrap = document.getElementById('muestras-tabs');
+    wrap.innerHTML = '';
+    muestras.forEach((m, i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'tab-btn';
+      b.textContent = m.name;
+      b.onclick = () => renderSample(i);
+      wrap.appendChild(b);
+      tabButtons.push(b);
+    });
+  }
+
+  function renderComparativa() {
+    if (muestras.length < 2) return;
+    document.getElementById('comparativa-section').style.display = '';
+    const mapas = muestras.map(m => {
+      const mm = {};
+      ((m.result.classification || {}).summary || []).forEach(r => { mm[r['class']] = r; });
+      return mm;
+    });
+    const clases = [];
+    mapas.forEach(mm => Object.keys(mm).forEach(c => {
+      if (!clases.includes(c)) clases.push(c);
+    }));
+    let html = '<table class="results"><thead><tr><th>Clase</th>'
+      + muestras.map(m => `<th class="num">${esc(m.name)}</th>`).join('')
+      + '</tr></thead><tbody>';
+    clases.forEach(c => {
+      html += `<tr${AGGREGATE.has(c) ? ' style="font-weight:bold;"' : ''}>`
+        + `<td><span class="cls-${c}">${c}</span></td>`;
+      mapas.forEach(mm => {
+        const r = mm[c];
+        const fp = r ? toNum(r.frequency_pct) : null;
+        html += r
+          ? `<td class="num">${r.reads} (${fp === null ? 'n/d' : fp.toFixed(2)}%)</td>`
+          : '<td class="num">—</td>';
+      });
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    document.getElementById('comparativa-wrap').innerHTML = html;
+  }
+
+  function renderSample(i) {
+    const res = muestras[i].result;
+    tabButtons.forEach((b, j) => {
+      b.className = 'tab-btn' + (j === i ? ' active' : '');
+    });
+    // secciones condicionales: se ocultan y se vuelven a mostrar por muestra
+    ['micro-section', 'hap-section', 'fondos-section', 'deljunc-section']
+      .forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
 
     // Los enlaces de descarga se activan PRIMERO: así, aunque falle el
     // renderizado de alguna tabla, los botones siempre funcionan.
     document.getElementById('dl-all').href     = `/api/download/${jobId}/all`;
     document.getElementById('dl-direct-url').textContent =
       location.origin + `/api/download/${jobId}/all`;
-    document.getElementById('dl-igv').href     = `/api/download/${jobId}/igv_zip`;
-    document.getElementById('dl-xlsx').href    = `/api/download/${jobId}/excel`;
-    document.getElementById('dl-summary').href = `/api/download/${jobId}/summary_tsv`;
-    document.getElementById('dl-perread').href = `/api/download/${jobId}/perread_tsv`;
+    document.getElementById('dl-igv').href     = dlHref(i, 'igv_zip');
+    document.getElementById('dl-xlsx').href    = dlHref(i, 'excel');
+    document.getElementById('dl-summary').href = dlHref(i, 'summary_tsv');
+    document.getElementById('dl-perread').href = dlHref(i, 'perread_tsv');
 
     try {
-      renderSummary(job.result.classification.summary);
-      renderClassChart(job.result.classification.summary);
+      renderSummary(res.classification.summary);
+      renderClassChart(res.classification.summary);
     } catch (e) {
       console.error('renderSummary', e);
     }
     try {
-      renderDelJunctions(job.result.deletion_view);
+      renderDelJunctions(res.deletion_view);
     } catch (e) {
       console.error('renderDelJunctions', e);
     }
-    if (job.result.microindels) {
+    if (res.microindels) {
       try {
       document.getElementById('micro-section').style.display = '';
       const tb = document.querySelector('#micro-table tbody');
       tb.innerHTML = '';
-      job.result.microindels.summary.forEach(row => {
+      res.microindels.summary.forEach(row => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td>${row.sitio}</td>
@@ -428,13 +511,13 @@
           <td class="num">${row.sitio_eliminado_por_deleccion_grande}</td>`;
         tb.appendChild(tr);
       });
-      document.getElementById('dl-micro-summary').href = `/api/download/${jobId}/micro_summary`;
-      document.getElementById('dl-micro-read').href    = `/api/download/${jobId}/micro_per_read`;
-      document.getElementById('dl-micro-alleles').href = `/api/download/${jobId}/micro_alleles`;
-      const hap = job.result.microindels.haplotipos;
+      document.getElementById('dl-micro-summary').href = dlHref(i, 'micro_summary');
+      document.getElementById('dl-micro-read').href    = dlHref(i, 'micro_per_read');
+      document.getElementById('dl-micro-alleles').href  = dlHref(i, 'micro_alleles');
+      const hap = res.microindels.haplotipos;
       if (hap && hap.rows && hap.rows.length) {
         document.getElementById('hap-section').style.display = '';
-        document.getElementById('dl-hap').href = `/api/download/${jobId}/micro_haplotipos`;
+        document.getElementById('dl-hap').href = dlHref(i, 'micro_haplotipos');
         const keys = Object.keys(hap.rows[0]);
         const hasFondo = keys.includes('fondo_alélico');
         const siteCols = keys.filter(k => k !== 'haplotipo' && k !== 'n_lecturas'
@@ -459,11 +542,11 @@
           + `Lecturas faseables (evaluables en todos los sitios): ${hap.n_faseables}</div>`;
         document.getElementById('hap-table-wrap').innerHTML = html;
       }
-      const fon = job.result.microindels['fondos_alélicos'];
+      const fon = res.microindels['fondos_alélicos'];
       if (fon && fon.clusters && fon.clusters.length) {
         document.getElementById('fondos-section').style.display = '';
         const df = document.getElementById('dl-fondos');
-        if (df) df.href = `/api/download/${jobId}/micro_fondos`;
+        if (df) df.href = dlHref(i, 'micro_fondos');
         let html = '<table class="results"><thead><tr>'
           + '<th>Fondo</th><th class="num">Lecturas</th><th class="num">%</th>'
           + '<th class="num">SNPs del fondo</th><th>SNPs (posición, ref>alt)</th>'
@@ -479,9 +562,9 @@
         document.getElementById('fondo-freq').textContent = p.snp_min_alt_freq ?? '0.2';
         document.getElementById('fondo-depth').textContent = p.snp_min_depth ?? 10;
       }
-      renderMicroChart(job.result.microindels);
+      renderMicroChart(res.microindels);
       try {
-        renderIndelSeq(job.result.microindels);
+        renderIndelSeq(res.microindels);
       } catch (e) {
         console.error('renderIndelSeq', e);
       }
@@ -489,6 +572,20 @@
         console.error('microindels', e);
       }
     }
+  }
+
+  function showResults(job) {
+    document.getElementById('results-section').style.display = '';
+    // muestras: formato nuevo ({samples: [{name, result}]}) o antiguo
+    // (result directo de una única muestra)
+    const r = job.result || {};
+    dlMulti = Array.isArray(r.samples) && r.samples.length > 0;
+    muestras = dlMulti
+      ? r.samples.map(s => ({ name: s.name, result: s.result }))
+      : [{ name: job.sample_name || 'muestra', result: r }];
+    renderTabs();
+    renderComparativa();
+    renderSample(0);
   }
 
   async function poll() {

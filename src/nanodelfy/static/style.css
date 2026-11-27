@@ -295,3 +295,26 @@ header h1 { overflow: visible; }
   vertical-align: middle;
   white-space: nowrap;
 }
+
+/* ---- pestañas de muestras (varios FASTQ en un mismo trabajo) ---- */
+#muestras-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tab-btn {
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.tab-btn:hover { border-color: var(--accent, #2563eb); }
+.tab-btn.active {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+  font-weight: 600;
+}

@@ -80,22 +80,46 @@ def _cmd_run(args: argparse.Namespace) -> None:
             "Indica ambas coordenadas (--del-start y --del-end) o ninguna "
             "(se calculan desde las guías).")
 
+    # Varios FASTQ en la misma llamada: una muestra por archivo, con las
+    # mismas condiciones. El nombre de cada muestra sale de su archivo.
+    fastqs = [Path(f) for f in args.fastq]
+    if args.name and len(fastqs) > 1:
+        raise SystemExit(
+            "--name sólo puede usarse con un único FASTQ; con varios, "
+            "cada muestra toma el nombre de su archivo.")
+
+    def _nombre(f: Path) -> str:
+        if args.name:
+            return args.name
+        n = f.name
+        for suf in (".fastq.gz", ".fq.gz", ".fastq", ".fq"):
+            if n.lower().endswith(suf):
+                n = n[: -len(suf)]
+                break
+        return n.split(".")[0] or "muestra"
+
     try:
-        res = run_full_pipeline(
-            job_dir=Path(args.out),
-            fastq_path=Path(args.fastq),
-            wt_fasta_path=Path(args.wt),
-            sample_name=args.name or Path(args.fastq).stem.split(".")[0],
-            params=params,
-            log=lambda m: print(m),
-        )
+        for f in fastqs:
+            if len(fastqs) > 1:
+                print(f"\n=== Muestra: {f.name} ===")
+            res = run_full_pipeline(
+                job_dir=Path(args.out) / _nombre(f),
+                fastq_path=f,
+                wt_fasta_path=Path(args.wt),
+                sample_name=_nombre(f),
+                params=params,
+                log=lambda m: print(m),
+            )
     except ValueError as e:
         raise SystemExit(f"Error: {e}")
-    out_dir = Path(args.out) / "results"
-    print(f"\nResultados en {out_dir}")
-    for k in ("read_classification", "summary", "microindels_summary"):
-        if k in res.get("files", {}):
-            print(f"  · {res['files'][k]}")
+    if len(fastqs) == 1:
+        out_dir = Path(args.out) / _nombre(fastqs[0]) / "results"
+        print(f"\nResultados en {out_dir}")
+        for k in ("read_classification", "summary", "microindels_summary"):
+            if k in res.get("files", {}):
+                print(f"  · {res['files'][k]}")
+    else:
+        print(f"\nResultados en {Path(args.out)} (una subcarpeta por muestra)")
 
 
 def _cmd_web(args: argparse.Namespace) -> None:
@@ -133,9 +157,10 @@ def build_parser() -> argparse.ArgumentParser:
                     "(Nanopore/PacBio) con Cas9 o Cas12a.")
     sub = ap.add_subparsers(dest="command", required=True)
 
-    run = sub.add_parser("run", help="ejecutar el pipeline sobre una muestra")
-    run.add_argument("--fastq", required=True,
-                    help="FASTQ (opcionalmente .gz) de la muestra")
+    run = sub.add_parser("run", help="ejecutar el pipeline sobre una o varias muestras")
+    run.add_argument("--fastq", required=True, nargs="+",
+                    help="uno o varios FASTQ (opcionalmente .gz); uno por "
+                         "muestra, con las mismas condiciones")
     run.add_argument("--wt", required=True,
                     help="FASTA del amplicón WT (la referencia EDIT se genera sola)")
     run.add_argument("--out", required=True, help="directorio de salida")

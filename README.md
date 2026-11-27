@@ -68,7 +68,10 @@ nanodelfy web            # abre http://127.0.0.1:8765
 ```
 
 Sube tu FASTQ y el FASTA del amplicón WT, indica las coordenadas de la deleción
-esperada (o deja que las calculen las guías) y pulsa Ejecutar.
+esperada (o deja que las calculen las guías) y pulsa Ejecutar. Puedes seleccionar
+varios FASTQ en la misma petición: se analizan todos con las mismas condiciones,
+cada muestra toma el nombre de su archivo y la página de resultados incluye
+pestañas por muestra y una tabla comparativa.
 
 ### Línea de comandos
 
@@ -81,6 +84,13 @@ nanodelfy run \
   --min-sv-deletion 100 \
   --guides "guia1: CCGAAGTTCCTATTCTCTAG" \
   --nuclease cas9
+```
+
+Con varios FASTQ (una muestra por archivo, mismas condiciones):
+
+```bash
+nanodelfy run --fastq muestra_A.fastq muestra_B.fastq muestra_C.fastq \
+  --wt amplicon_WT.fa --out salida --del-start 1438 --del-end 1557
 ```
 
 O con un preset:

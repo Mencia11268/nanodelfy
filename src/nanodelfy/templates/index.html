@@ -27,9 +27,11 @@
     <div class="card">
       <h2><span class="step">1</span>Archivos de entrada</h2>
       <div class="field">
-        <label>Lecturas Nanopore (FASTQ o FASTQ.gz)</label>
-        <input type="file" name="fastq" accept=".fastq,.fq,.fastq.gz,.fq.gz" required>
-        <div class="hint">Acepta .fastq, .fq, .fastq.gz, .fq.gz</div>
+        <label>Lecturas Nanopore (uno o varios FASTQ o FASTQ.gz)</label>
+        <input type="file" name="fastq" accept=".fastq,.fq,.fastq.gz,.fq.gz" multiple required>
+        <div class="hint">Puedes seleccionar varios archivos: se analizan
+          todos con las mismas condiciones, uno por muestra. Cada muestra
+          toma el nombre de su archivo.</div>
       </div>
       <div class="field">
         <label>Amplicón silvestre (FASTA)</label>
@@ -37,9 +39,11 @@
         <div class="hint">Un único registro FASTA, normalmente ~3.2 kb</div>
       </div>
       <div class="field">
-        <label>Nombre de la muestra</label>
-        <input type="text" name="sample_name" value="muestra_01" required>
-        <div class="hint">Sólo letras, números, guiones y puntos</div>
+        <label>Nombre del análisis (opcional)</label>
+        <input type="text" name="sample_name" value="" placeholder="opcional">
+        <div class="hint">Etiqueta para la cabecera de la página de
+          resultados; por defecto, el nombre de la muestra (o del primer
+          archivo si subes varios)</div>
       </div>
     </div>
 
