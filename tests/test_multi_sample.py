@@ -9,6 +9,10 @@ import random
 import time
 from pathlib import Path
 
+import pytest
+
+pytest.importorskip("httpx", reason="TestClient requiere httpx")
+
 from fastapi.testclient import TestClient
 
 from nanodelfy.server import app
