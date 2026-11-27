@@ -303,10 +303,22 @@
       return;
     }
     let html = '';
+    if (view.teorica) {
+      const t = view.teorica;
+      html += `<div class="info-box" style="margin-bottom: 14px;">` +
+        `Deleción teórica según las guías (${esc(t.nuclease)}): ` +
+        `<b>${t.size} nt</b> entre ${esc(t.guia5)} (corte ` +
+        `${esc(String(t.corte5))}) y ${esc(t.guia3)} (corte ` +
+        `${esc(String(t.corte3))}).</div>`;
+    }
     view.deleciones.forEach(d => {
+      const delta = view.teorica ? d.length - view.teorica.size : null;
       html += `<div class="aln-block">` +
         `<h3>${esc(d.etiqueta)} · ${d.n} lecturas (${d.pct}%) · ` +
-        `deleción de ${d.length} nt · unión ${d.start + 1}|${d.end + 1}` +
+        `deleción de ${d.length} nt` +
+        (delta === null ? '' :
+          ` (Δ${delta > 0 ? '+' : ''}${delta} nt vs teórica)`) +
+        ` · unión ${d.start + 1}|${d.end + 1}` +
         (d.ins_union ? ` · inserción de ${d.ins_union.length} nt` : '') +
         `</h3>`;
       // flanco 5' + inserción de unión (azul) + barra de la deleción + flanco 3'

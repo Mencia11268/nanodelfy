@@ -7,7 +7,8 @@ from typing import Callable
 from .refs import build_edited_reference
 from .filter_align import filter_reads, align_minimap2
 from .classify import Params, run_classification
-from .microindel import run_microindel_analysis, parse_guides, _allele_segments
+from .microindel import (run_microindel_analysis, parse_guides,
+                        locate_cut_sites, _allele_segments)
 from .frt import analizar_frt
 
 
@@ -92,12 +93,40 @@ def run_full_pipeline(
 
     # ------- 5) Microindels alrededor de los cortes de guía (opcional)
     micro_stats = None
+    teorica = None
     guides_text = params.get("guides", "")
     if guides_text and guides_text.strip():
         set_progress(90, "Analizando microindels en cortes de guía")
         log("[5/5] Microindels alrededor de los cortes de guía...")
         guides = parse_guides(guides_text)
         if guides:
+            # Deleción teórica entre los cortes de dos guías distintas,
+            # con la regla de corte de la nucleasa elegida (cas9: corte
+            # romo; cas12a: centro de la región de corte escalonado)
+            try:
+                sitios = locate_cut_sites(
+                    wt_seq, guides,
+                    nuclease=params.get("nuclease", "cas9"),
+                    max_mismatch=params.get("guide_max_mismatch", 1),
+                    log=log)
+                pares = [(a, b) for a in sitios for b in sitios
+                         if a.guide_label != b.guide_label
+                         and a.cut_pos < b.cut_pos]
+                if pares:
+                    lo, hi = max(pares,
+                                key=lambda p: p[1].cut_pos - p[0].cut_pos)
+                    teorica = {
+                        "start": lo.cut_pos, "end": hi.cut_pos,
+                        "size": hi.cut_pos - lo.cut_pos,
+                        "guia5": lo.guide_label, "guia3": hi.guide_label,
+                        "nuclease": lo.nuclease,
+                        "corte5": lo.cut_1based, "corte3": hi.cut_1based,
+                    }
+                    log(f"  Deleción teórica ({lo.nuclease}): "
+                        f"{hi.cut_pos - lo.cut_pos} nt entre {lo.site_id} "
+                        f"y {hi.site_id}")
+            except ValueError as e:
+                log(f"  [AVISO] deleción teórica no calculada: {e}")
             micro_stats = run_microindel_analysis(
                 filt_fq, wt_fa, guides,
                 out_prefix=out_dir / sample_name,
@@ -262,6 +291,7 @@ def run_full_pipeline(
             "ref_len": ref_stats["wt_length"] if ref_stats else None,
             "esperada": {"start": params["deletion_start"] - 1,
                         "end": params["deletion_end"]},
+            "teorica": teorica,
             "cortes": cortes,
             "deleciones": deleciones,
         }

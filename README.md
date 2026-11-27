@@ -105,7 +105,7 @@ Los mismos parámetros funcionan en la web (campos del formulario) y en el CLI.
 | `min_edit_ref_coverage` | 0.80 | Cobertura mínima de la referencia EDIT para aceptar una lectura como editada. |
 | `wt_min`, `wt_max` | auto (±4 %) | Ventana de longitud de lecturas "tipo WT". Si se omite, se deriva del tamaño del amplicón. |
 | `nhej_search_window` | 500 | Ventana de búsqueda de uniones NHEJ alrededor de cada breakpoint. |
-| `guides` | vacío | Guías, una por línea en formato `etiqueta: SECUENCIA` (ADN o ARN, U/T). |
+| `guides` | vacío | Guías, una por línea en formato `etiqueta: SECUENCIA` (ADN o ARN, U/T). Con dos o más guías se calcula además el tamaño teórico de la deleción (distancia entre los cortes, según la nucleasa), que se muestra en el gráfico de uniones junto a la diferencia (Δ) de cada variante observada. |
 | `nuclease` | cas9 | `cas9` (protospacer 20 nt, PAM NGG, corte romo 3 nt aguas arriba del PAM) o `cas12a` (protospacer 23-24 nt, PAM TTTV, nicks a 18 y 23 nt del extremo PAM-proximal). |
 | `microindel_window` | 20 | Ventana (nt) alrededor del corte para el análisis de microindels. |
 | `microindel_max_indel` | 50 | Indel máximo (nt) considerado microindel. |
