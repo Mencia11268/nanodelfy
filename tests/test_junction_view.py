@@ -204,3 +204,160 @@ def test_coordenadas_de_deleccion_derivadas_de_guias(tmp_path):
     resumen = {r["class"]: r["reads"]
                for r in res["classification"]["summary"]}
     assert resumen.get("DEL_EXACT") == 20, resumen
+
+
+def test_recorte_de_bordes_templados_unitario():
+    from nanodelfy.core.classify import _recorte_bordes_templados
+    rng = random.Random(99)
+    region = "".join(rng.choice("ACGT") for _ in range(200))
+    core = region[50:73]                     # copia exacta: 23 nt
+    core1 = core[:10] + ("A" if core[10] != "A" else "C") + core[11:]
+
+    # copia limpia y copia con 1 discrepancia: intactas
+    assert _recorte_bordes_templados(core, region) == core
+    assert _recorte_bordes_templados(core1, region) == core1
+    # bases extra en el borde 5' SIN pérdida en el flanco: son una
+    # inserción real y se conservan (aunque la copia sola alinee mejor)
+    assert _recorte_bordes_templados("G" + core, region) == "G" + core
+    assert _recorte_bordes_templados("GC" + core, region) == "GC" + core
+    # bases extra en el borde 3': igual
+    assert _recorte_bordes_templados(core + "G", region) == core + "G"
+    # bases extra CON pérdida equivalente en un homopolímero del flanco:
+    # son compensación y se recortan
+    assert _recorte_bordes_templados("G" + core, region, perdidas5=1) == core
+    assert _recorte_bordes_templados("GC" + core, region, perdidas5=2) == core
+    assert _recorte_bordes_templados(core + "G", region, perdidas3=1) == core
+    # una sola base perdida con dos extra: solo se recorta la compensada
+    assert _recorte_bordes_templados(
+        "GC" + core, region, perdidas5=1) == "C" + core
+    # inserción NO templada: no se toca (aunque lleve borde extra)
+    azar = "".join(rng.choice("ACGT") for _ in range(20))
+    while any(sum(a != b for a, b in zip(azar, region[p:p + 20])) <= 3
+              for p in range(181)):
+        azar = "".join(rng.choice("ACGT") for _ in range(20))
+    assert _recorte_bordes_templados("G" + azar, region) == "G" + azar
+    assert _recorte_bordes_templados(
+        "G" + azar, region, perdidas5=1) == "G" + azar
+    # inserción corta (NHEJ pequeño): no se toca
+    assert _recorte_bordes_templados("GATTACAGC", region) == "GATTACAGC"
+
+
+def test_bordes_de_compensacion_en_insercion_templada(tmp_path):
+    """Inserción templada + bases de compensación → un solo grupo.
+
+    Replica el caso real: la inserción de la unión es una copia de la
+    región deleción y el flanco 5' lleva un homopolímero (AAA) que el
+    ruido de Nanopore lee como AA o A. Esas lecturas pierden 1-2 bases
+    en el flanco y el alineador compensa el desplazamiento colocando
+    bases fantasma en el borde 5' de la inserción. Tras el recorte de
+    bordes templados (basado en el balance de bases perdidas), todas
+    deben caer en el mismo grupo mostrando la inserción limpia.
+    """
+    WT2, DS2, DE2 = 700, 200, 400
+    rng = random.Random(21)
+    wt = list("".join(rng.choice("ACGT") for _ in range(WT2)))
+    wt[190:193] = "AAA"                       # homopolímero del flanco 5'
+    wt = "".join(wt)
+    _write_fasta(tmp_path / "wt.fa", wt)
+
+    plantilla = wt[330:353]                  # dentro de la deleción
+    ins = plantilla[:10] + ("A" if plantilla[10] != "A" else "C") \
+        + plantilla[11:]                     # copia con 1 discrepancia
+    # base(s) de compensación que NO casa con el final del flanco 5'
+    # (para que el alineador las deje dentro de la inserción)
+    comp = "G" if wt[DS2 - 2] != "G" else "T"
+
+    # flanco con el homopolímero leído con pérdida: AAA -> AA / A
+    flanko_aa = wt[:190] + "AA" + wt[193:DS2 - 1]      # pierde 1 A
+    flanko_a = wt[:190] + "A" + wt[193:DS2 - 1]        # pierde 2 A
+
+    reads = ([(f"limpia_{i}", wt[:DS2 - 1] + ins + wt[DE2:])
+              for i in range(10)]
+             + [(f"comp1_{i}", flanko_aa + comp + ins + wt[DE2:])
+                for i in range(6)]
+             + [(f"comp2_{i}", flanko_a + comp + "C" + ins + wt[DE2:])
+                for i in range(4)]
+             + [(f"wt_{i}", wt) for i in range(20)])
+    rng.shuffle(reads)
+    fq = tmp_path / "muestra4.fastq"
+    with open(fq, "w") as f:
+        for rid, s in reads:
+            f.write(f"@{rid}\n{s}\n+\n{'I' * len(s)}\n")
+
+    res = run_full_pipeline(
+        tmp_path / "job4", fq, tmp_path / "wt.fa", "mix4",
+        params={
+            "deletion_start": DS2, "deletion_end": DE2,
+            "min_quality": 10, "min_length": 400, "max_length": 900,
+            "breakpoint_tolerance": 20, "min_sv_deletion": 100,
+            "nhej_search_window": 200, "wt_min": 650, "wt_max": 760,
+        },
+        log=lambda m: None,
+    )
+
+    delecs = res["deletion_view"]["deleciones"]
+    con_ins = [d for d in delecs if d["ins_union"]]
+    assert con_ins, "debe haber uniones con inserción"
+    # un único grupo con la inserción limpia y las 20 lecturas
+    assert len(con_ins) == 1, \
+        f"esperaba 1 grupo con inserción, hay {len(con_ins)}: " \
+        + "; ".join(f"{d['ins_union'][:30]}(n={d['n']})" for d in con_ins)
+    assert con_ins[0]["ins_union"] == ins, con_ins[0]["ins_union"]
+    assert con_ins[0]["n"] == 20, con_ins[0]["n"]
+
+
+def test_bases_reales_en_borde_5_no_se_recortan(tmp_path):
+    """Bases extra en el borde 5' sin pérdida de flanco: inserción real.
+
+    Si la lectura no ha perdido bases en un homopolímero del flanco,
+    las bases extra en el borde 5' de una inserción templada se
+    consideran inserción real: forman su propio grupo y NO se recortan
+    ni se fusionan con el grupo de la copia limpia.
+    """
+    WT2, DS2, DE2 = 700, 200, 400
+    rng = random.Random(29)
+    wt = list("".join(rng.choice("ACGT") for _ in range(WT2)))
+    wt = "".join(wt)
+    _write_fasta(tmp_path / "wt.fa", wt)
+
+    plantilla = wt[330:353]
+    ins = plantilla[:10] + ("A" if plantilla[10] != "A" else "C") \
+        + plantilla[11:]
+    # bases reales del borde 5' (sin pérdida en el flanco, no son
+    # compensación de homopolímero): con esta semilla el alineador no
+    # las absorbe en el flanco ni en la región deleción y quedan dentro
+    # del patrón de la inserción
+    borde = "GC"
+
+    reads = ([(f"limpia_{i}", wt[:DS2 - 1] + ins + wt[DE2:])
+              for i in range(10)]
+             + [(f"real_{i}", wt[:DS2 - 1] + borde + ins + wt[DE2:])
+                for i in range(6)]
+             + [(f"wt_{i}", wt) for i in range(20)])
+    rng.shuffle(reads)
+    fq = tmp_path / "muestra5.fastq"
+    with open(fq, "w") as f:
+        for rid, s in reads:
+            f.write(f"@{rid}\n{s}\n+\n{'I' * len(s)}\n")
+
+    res = run_full_pipeline(
+        tmp_path / "job5", fq, tmp_path / "wt.fa", "mix5",
+        params={
+            "deletion_start": DS2, "deletion_end": DE2,
+            "min_quality": 10, "min_length": 400, "max_length": 900,
+            "breakpoint_tolerance": 20, "min_sv_deletion": 100,
+            "nhej_search_window": 200, "wt_min": 650, "wt_max": 760,
+        },
+        log=lambda m: None,
+    )
+
+    delecs = res["deletion_view"]["deleciones"]
+    con_ins = [d for d in delecs if d["ins_union"]]
+    assert len(con_ins) == 2, \
+        f"esperaba 2 grupos con inserción, hay {len(con_ins)}: " \
+        + "; ".join(f"{d['ins_union'][:30]}(n={d['n']})" for d in con_ins)
+    por_ins = {d["ins_union"]: d["n"] for d in con_ins}
+    assert por_ins.get(ins) == 10, por_ins
+    # las 6 lecturas con las 2 bases 5' reales forman su propio grupo
+    assert por_ins.get(borde + ins) == 6, por_ins
+

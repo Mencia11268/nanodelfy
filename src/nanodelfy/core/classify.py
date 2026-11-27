@@ -241,8 +241,162 @@ def collect_evidence_from_records(wt_records: List[AlnRecord],
 
 # ---------- reglas de clasificación ----------------------------------------
 
+def _perdidas_flanco(ops, lo: int, hi: int, wt_seq: str, junc: int,
+                     side: str) -> int:
+    """Bases realmente perdidas por homopolímero en el flanco de la unión.
+
+    El ruido de Nanopore en homopolímeros (un AAA de la referencia leído
+    como AA) deja bases sin leer en el flanco; el alineador compensa ese
+    desplazamiento colocando bases fantasma en el borde de la inserción
+    de la unión. Cuántas bases se han perdido así en el flanco indica
+    cuántas bases de compensación cabe recortar del borde de la
+    inserción.
+
+    La pérdida se mide sobre la SECUENCIA de la lectura (cuántas bases
+    del homopolímero conserva entre la D y la unión), no sobre la
+    longitud de las D del CIGAR: el alineador puede desplazar la unión
+    unas bases e inflar o desplazar las D. Además, las bases esperadas
+    se anclan a la unión teórica (``junc``): si el homopolímero llega a
+    cruzar la unión, la parte que cae dentro de la deleción no cuenta
+    como pérdida del flanco.
+    """
+    if not wt_seq:
+        return 0
+    q = "".join(o[3] for o in ops if o[3])
+    # posición de consulta donde empieza el flanco (tras la unión)
+    if side == "5":
+        q_j = sum(len(o[3]) for o in ops if o[1] < hi)
+    else:
+        q_j = sum(len(o[3]) for o in ops if o[1] < lo)
+
+    def _run_final(s: str, b: str) -> int:
+        k = 0
+        while k < len(s) and s[len(s) - 1 - k] == b:
+            k += 1
+        return k
+
+    def _run_inicial(s: str, b: str) -> int:
+        k = 0
+        while k < len(s) and s[k] == b:
+            k += 1
+        return k
+
+    total, vistos, q_d = 0, set(), 0
+    for op, rpos, length, qs in ops:
+        if op != "D" or not (lo <= rpos < hi) or not (1 <= length <= 2):
+            q_d += len(qs)
+            continue
+        # homopolímero maximal (>= 3) que toca el segmento borrado
+        mejor = None
+        for j in range(max(0, rpos - 1),
+                       min(len(wt_seq), rpos + length + 1)):
+            b = wt_seq[j]
+            rs = j
+            while rs > 0 and wt_seq[rs - 1] == b:
+                rs -= 1
+            re_ = j + 1
+            while re_ < len(wt_seq) and wt_seq[re_] == b:
+                re_ += 1
+            if re_ - rs >= 3 and (mejor is None
+                                 or re_ - rs > mejor[2] - mejor[1]):
+                mejor = (b, rs, re_)
+        q_d += len(qs)
+        if mejor is None:
+            continue
+        b, rs, re_ = mejor
+        if (rs, re_) in vistos:
+            continue
+        vistos.add((rs, re_))
+        # bases del homopolímero que deben quedar en el flanco leído
+        if side == "5":
+            esperadas = min(re_, junc) - rs
+        else:
+            esperadas = re_ - max(rs, junc)
+        if esperadas < 3:
+            continue
+        # bases que la lectura conserva de verdad en el homopolímero
+        if side == "5":
+            trail = _run_final(q[:q_d], b)
+            lead = _run_inicial(q[q_d:q_j], b) if q_d < q_j else 0
+        else:
+            trail = _run_final(q[q_j:q_d], b) if q_j < q_d else 0
+            lead = _run_inicial(q[q_d:], b)
+        perdida = esperadas - (trail + lead)
+        if perdida > 0:
+            total += min(perdida, 3)
+    return min(total, 3)
+
+
+def _recorte_bordes_templados(ins: str, region: str, perdidas5: int = 0,
+                              perdidas3: int = 0, max_borde: int = 3,
+                              min_core: int = 12) -> str:
+    """Recorta bases de compensación en los bordes de una inserción de unión.
+
+    Las inserciones templadas (copias de la región deleción) llegan a
+    veces con 1-2 bases extra en un borde: cuando el ruido de
+    homopolímero de Nanopore hace que la lectura pierda bases en el
+    flanco (un AAA de la referencia leído como AA), el alineador
+    compensa el desplazamiento arrastrando bases fantasma al borde de
+    la inserción anclada dentro de la deleción.
+
+    El criterio es el balance de bases: las bases del borde solo se
+    recortan si la lectura perdió ese mismo número de bases en un
+    homopolímero del flanco (perdidas5/perdidas3) y el núcleo restante
+    sigue siendo una copia de la región deleción. Sin esa evidencia,
+    las bases extra del borde se consideran una inserción real y se
+    conservan aunque la copia sola alinee mejor. Las inserciones no
+    templadas (que no casan con la región) quedan intactas.
+    """
+    n = len(ins)
+    if n < min_core or not region:
+        return ins
+
+    def _mejor_mm(core: str):
+        """Discrepancias del mejor alineamiento de core en la región.
+
+        None si core es corto o no casa (por encima del umbral).
+        """
+        L = len(core)
+        if L < min_core:
+            return None
+        mm_max = max(1, round(0.15 * L))
+        mejor = None
+        for p in range(len(region) - L + 1):
+            mm = 0
+            for a, b in zip(region[p:p + L], core):
+                if a != b:
+                    mm += 1
+                    if mm > mm_max:
+                        break
+            if mm <= mm_max and (mejor is None or mm < mejor):
+                mejor = mm
+                if mejor == 0:
+                    break
+        return mejor
+
+    # balance de bases: cuántas bases de compensación explica la pérdida
+    # del flanco; 0 para la inserción tal cual
+    candidatos = []          # (balance, discrepancias, recorte, core)
+    for k in range(0, max_borde + 1):
+        for k5 in range(0, k + 1):
+            k3 = k - k5
+            core = ins[k5:n - k3] if k3 else ins[k5:]
+            mm = _mejor_mm(core)
+            if mm is None:
+                continue
+            balance = abs(k5 - perdidas5) + abs(k3 - perdidas3)
+            candidatos.append((balance, mm, k, core))
+    if not candidatos:
+        return ins                # nada templado: inserción intacta
+    # el balance manda (solo se recorta con evidencia de compensación);
+    # después, menos discrepancias; a igualdad, el recorte mínimo
+    candidatos.sort(key=lambda c: c[:3])
+    return candidatos[0][3]
+
+
 def _junction_pattern(aln, d_start: int, d_end: int, wt_seq: str,
-                      flank: int = 30, tol: int = 10):
+                      flank: int = 30, tol: int = 10,
+                      theo_start: int = None, theo_end: int = None):
     """Patrón OBSERVADO de la unión de una deleción grande (para la web).
 
     Recorre el CIGAR del alineamiento primario contra WT, localiza la D
@@ -314,6 +468,20 @@ def _junction_pattern(aln, d_start: int, d_end: int, wt_seq: str,
     ins_union = "".join(
         qs for op, rpos, length, qs in ops[lo:hi + 1]
         if op == "I" or (op == "M" and qs != wt_seq[rpos:rpos + length]))
+
+    # bases de compensación en los bordes de una inserción templada: si el
+    # núcleo de la inserción es una copia de la región deleción, las bases
+    # extra de los bordes (ruido de homopolímero que desplaza el anclaje
+    # del alineador) no son inserciones reales y se recortan
+    if wt_seq:
+        junc5 = min(d_start, theo_start) if theo_start is not None else d_start
+        junc3 = max(d_end, theo_end) if theo_end is not None else d_end
+        ins_union = _recorte_bordes_templados(
+            ins_union, wt_seq[c_start:c_end],
+            perdidas5=_perdidas_flanco(ops, c_start - 12, c_start, wt_seq,
+                                       junc5, "5"),
+            perdidas3=_perdidas_flanco(ops, c_end, c_end + 12, wt_seq,
+                                       junc3, "3"))
 
     flanks = []
     for op, rpos, length, qs in ops:
@@ -974,7 +1142,8 @@ def classify_deletion(ev: ReadEvidence, p: Params) -> Tuple[Optional[str], dict]
         "source": source,
         # eventos observados alrededor de la unión (para el gráfico web);
         # None si el alineamiento primario WT no contiene la D completa
-        "junction_pattern": _junction_pattern(wt, rs, re_, p.wt_seq),
+        "junction_pattern": _junction_pattern(
+            wt, rs, re_, p.wt_seq, theo_start=ds, theo_end=de),
     }
     if source == "edit_alignment":
         info["edit_cov"] = ev_best.get("edit_cov", 0)
